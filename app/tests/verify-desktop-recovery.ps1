@@ -66,7 +66,11 @@ if($taskProbe -eq [IntPtr]::Zero){throw 'Could not create the temporary verifica
   for($taskCycle=0;$taskCycle -lt 3;$taskCycle++){
     [void][HextRecoveryProbe]::SetWindowPos($taskProbe,[IntPtr]::Zero,$taskCenter-300,$taskTop,600,180,0x40)
     [HextRecoveryProbe]::Focus($taskProbe)
-    $null=Wait-HextRecovery {param($s) -not $s.Visible -and -not($s.Flags-band 16)} 'Covering application did not suppress Hext'
+    $null=Wait-HextRecovery {param($s)
+      # Delayed shell focus handoffs after MinimizeAll can steal the first activation.
+      if([HextRecoveryProbe]::GetForegroundWindow() -ne $taskProbe){[HextRecoveryProbe]::Focus($taskProbe);return $false}
+      -not $s.Visible -and -not($s.Flags -band 16)
+    } 'Covering application did not suppress Hext'
     [void][HextRecoveryProbe]::SetWindowPos($taskProbe,[IntPtr]::Zero,20,$taskTop+200,300,220,0x40)
     $null=Wait-HextRecovery {param($s) $s.Visible -and ($s.Flags-band 64) -and -not($s.Flags-band 1)} 'Exposed desktop area did not restore the compact island'
   }
