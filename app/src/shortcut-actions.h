@@ -58,6 +58,7 @@ void finishShortcutOverlay(){
     bool wasOverlay=shortcutOverlay;
     shortcutOverlay=shortcutClosing=shortcutHold=false;
     if(!testMode&&wasOverlay){
+        SetWindowLongPtrW(windowHandle,GWL_EXSTYLE,GetWindowLongPtrW(windowHandle,GWL_EXSTYLE)|WS_EX_NOACTIVATE);
         SetWindowPos(windowHandle,HWND_NOTOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
         if(GetForegroundWindow()==windowHandle&&IsWindow(shortcutReturnWindow))SetForegroundWindow(shortcutReturnWindow);
         placeOnDesktop();
@@ -69,10 +70,24 @@ void toggleShortcutPanel(){
     hidden=false;visibility.awaitLeave=false;
     if(!shortcutOverlay)shortcutReturnWindow=testMode?nullptr:GetForegroundWindow();
     shortcutOverlay=true;shortcutClosing=false;shortcutHold=true;desktopEligible=true;
+    if(!testMode)SetWindowLongPtrW(windowHandle,GWL_EXSTYLE,GetWindowLongPtrW(windowHandle,GWL_EXSTYLE)&~static_cast<LONG_PTR>(WS_EX_NOACTIVATE));
     if(!windowShown||!IsWindowVisible(windowHandle)||IsIconic(windowHandle))restoreDesktopCompact();
     visibility.expanded=true;visibility.compactVisible=true;appearance.target=1;
     setExpanded(true);
-    if(!testMode){placeOnDesktop();SetForegroundWindow(windowHandle);SetFocus(windowHandle);}
+    if(!testMode){
+        SetForegroundWindow(windowHandle);
+        if(GetForegroundWindow()!=windowHandle){
+            // Explicit keyboard opening is interactive. Attach only to a responsive
+            // foreground queue, and detach immediately after the focus handoff.
+            HWND foreground=GetForegroundWindow();DWORD_PTR ready=0;
+            DWORD thread=foreground?GetWindowThreadProcessId(foreground,nullptr):0;
+            DWORD own=GetCurrentThreadId();
+            if(thread&&thread!=own&&SendMessageTimeoutW(foreground,WM_NULL,0,0,SMTO_ABORTIFHUNG,100,&ready)&&AttachThreadInput(own,thread,TRUE)){
+                SetForegroundWindow(windowHandle);SetFocus(windowHandle);AttachThreadInput(own,thread,FALSE);
+            }
+        }else SetFocus(windowHandle);
+        placeOnDesktop();
+    }
     invalidate(450);
 }
 void toggleShortcutVisibility(){

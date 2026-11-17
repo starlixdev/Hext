@@ -26,43 +26,56 @@ if ([HextShortcutRuntime]::SendMessageTimeout($taskWindow,0,[IntPtr]::Zero,[IntP
 function Read-HextWindow {
   $taskBounds = New-Object HextShortcutRuntime+Rect
   [void][HextShortcutRuntime]::GetWindowRect($taskWindow,[ref]$taskBounds)
-  [pscustomobject]@{ Visible=[HextShortcutRuntime]::IsWindowVisible($taskWindow); Topmost=(([HextShortcutRuntime]::GetWindowLong($taskWindow,-20) -band 8) -ne 0); Height=($taskBounds.Bottom-$taskBounds.Top) }
+  $taskStateBits = [IntPtr]::Zero
+  if ([HextShortcutRuntime]::SendMessageTimeout($taskWindow,0x8009,[IntPtr]::Zero,[IntPtr]::Zero,2,8000,[ref]$taskStateBits) -eq [IntPtr]::Zero) { throw 'Hext state query timed out.' }
+  $taskStateFlags=$taskStateBits.ToInt64()
+  $taskNativeStyle=[IntPtr]::Zero
+  [void][HextShortcutRuntime]::SendMessageTimeout($taskWindow,0x8009,[IntPtr]1,[IntPtr]::Zero,2,8000,[ref]$taskNativeStyle)
+  $taskLayerError=[IntPtr]::Zero
+  [void][HextShortcutRuntime]::SendMessageTimeout($taskWindow,0x8009,[IntPtr]2,[IntPtr]::Zero,2,8000,[ref]$taskLayerError)
+  $taskAbove=[IntPtr]::Zero
+  [void][HextShortcutRuntime]::SendMessageTimeout($taskWindow,0x8009,[IntPtr]3,[IntPtr]::Zero,2,8000,[ref]$taskAbove)
+  [pscustomobject]@{ Visible=[HextShortcutRuntime]::IsWindowVisible($taskWindow); Topmost=(([HextShortcutRuntime]::GetWindowLong($taskWindow,-20) -band 8) -ne 0); AbovePrevious=($taskAbove -ne [IntPtr]::Zero); NativeStyle=$taskNativeStyle.ToInt64();ExternalStyle=[HextShortcutRuntime]::GetWindowLong($taskWindow,-20); LayerError=$taskLayerError.ToInt64(); Height=($taskBounds.Bottom-$taskBounds.Top); Flags=$taskStateFlags; Expanded=(($taskStateFlags -band 1) -ne 0); HideID=(($taskStateFlags -shr 8) -band 15); ExpandID=(($taskStateFlags -shr 12) -band 15) }
 }
 function Invoke-HextShortcut([int]$slot) {
-  # Startup reservations: hide=1, expand=2. This script runs immediately after deployment.
+  $taskIDs=Read-HextWindow
+  $taskID=if($slot -eq 1){$taskIDs.HideID}else{$taskIDs.ExpandID}
+  if(-not $taskID){throw ('Shortcut is not registered: '+($taskIDs | ConvertTo-Json -Compress))}
   $taskKey = if ($slot -eq 1) { 72 } else { 32 }
-  [void][HextShortcutRuntime]::PostMessage($taskWindow,0x0312,[IntPtr]$slot,[IntPtr](($taskKey -shl 16) -bor 3))
+  [void][HextShortcutRuntime]::PostMessage($taskWindow,0x0312,[IntPtr]$taskID,[IntPtr](($taskKey -shl 16) -bor 3))
+}
+function Wait-HextState([scriptblock]$Predicate,[string]$Failure) {
+  $taskDeadline=[DateTime]::UtcNow.AddSeconds(8)
+  do {
+    $taskProbe=Read-HextWindow
+    if(& $Predicate $taskProbe){return $taskProbe}
+    Start-Sleep -Milliseconds 50
+  }while([DateTime]::UtcNow -lt $taskDeadline)
+  throw ($Failure+': '+($taskProbe | ConvertTo-Json -Compress))
 }
 try {
   # The pointer can have expanded normal desktop presence before the test starts.
-  [void][HextShortcutRuntime]::PostMessage($taskWindow,0x8005,[IntPtr]10,[IntPtr]::Zero)
-  Start-Sleep -Milliseconds 750
+  if((Read-HextWindow).Expanded){
+    Invoke-HextShortcut 2
+    $null=Wait-HextState {param($s) -not $s.Expanded -and -not $s.Topmost -and $s.Height -lt 130} 'Initial collapse did not settle'
+  }
   Invoke-HextShortcut 2
-  Start-Sleep -Milliseconds 750
-  $taskState = Read-HextWindow
-  if (-not $taskState.Visible -or -not $taskState.Topmost -or $taskState.Height -lt 200) { throw ('Expand did not open above the current application: ' + ($taskState | ConvertTo-Json -Compress)) }
+  $null=Wait-HextState {param($s) $s.Expanded -and $s.Visible -and ($s.Topmost -or $s.AbovePrevious) -and $s.Height -ge 200} 'Expand did not open above the current application'
   'PASS: expand opens the real Hext window above the current application.'
   Invoke-HextShortcut 2
-  Start-Sleep -Milliseconds 1100
-  $taskState = Read-HextWindow
-  if ($taskState.Topmost -or $taskState.Height -gt 130) { throw 'Collapse did not restore normal desktop presentation.' }
+  $null=Wait-HextState {param($s) -not $s.Expanded -and -not $s.Topmost -and $s.Height -lt 130} 'Collapse did not restore normal desktop presentation'
   'PASS: collapse removes topmost and restores compact geometry.'
   Invoke-HextShortcut 1
-  Start-Sleep -Milliseconds 550
-  if ((Read-HextWindow).Visible) { throw 'Hide did not hide the window.' }
+  $null=Wait-HextState {param($s) -not $s.Visible -and ($s.Flags -band 8)} 'Hide did not hide the window'
   Invoke-HextShortcut 1
-  Start-Sleep -Milliseconds 450
+  $null=Wait-HextState {param($s) -not ($s.Flags -band 8)} 'Show did not resume normal presence'
   Invoke-HextShortcut 2
-  Start-Sleep -Milliseconds 750
-  $taskState = Read-HextWindow
-  if (-not $taskState.Visible -or -not $taskState.Topmost) { throw 'Expand could not restore the hidden island.' }
+  $null=Wait-HextState {param($s) $s.Expanded -and $s.Visible -and ($s.Topmost -or $s.AbovePrevious)} 'Expand could not restore the hidden island'
   'PASS: visibility and expansion remain independent after hide/show.'
   Invoke-HextShortcut 1
-  Start-Sleep -Milliseconds 650
-  $taskState = Read-HextWindow
-  if ($taskState.Visible -or $taskState.Topmost) { throw 'Hiding the overlay left it visible or topmost.' }
+  $null=Wait-HextState {param($s) -not $s.Visible -and -not $s.Topmost -and ($s.Flags -band 8)} 'Hiding the overlay left it visible or topmost'
   Invoke-HextShortcut 1
-  Start-Sleep -Milliseconds 450
+  $null=Wait-HextState {param($s) -not ($s.Flags -band 8)} 'Could not restore normal presence'
   'PASS: hiding the expanded overlay clears its topmost state; normal mode restored.'
 } finally {
   if ((Read-HextWindow).Topmost) {

@@ -8,7 +8,7 @@ Hext uses one layered Win32 popup with a Direct2D DC render target and DirectWri
 
 Normal presence depends on whether the compact island's footprint is exposed. Visible, uncloaked, non-minimized windows above the desktop suppress it only when their frames overlap that area. Window enumeration stops at the desktop host, preserving Show Desktop restacking behavior. A small foreground dialog elsewhere on the desktop does not hide the island.
 
-The normal island stays above desktop icons and below application windows. Explicit keyboard expansion temporarily uses the topmost layer. Collapsing removes that layer after the morph finishes and restores focus to the previous window when appropriate. The separate visibility shortcut pauses or resumes the whole island.
+The normal island stays above desktop icons and below application windows. Explicit keyboard expansion temporarily uses the topmost layer and restores that layer if Windows demotes it while manual mode is active. Collapsing removes it after the morph finishes and restores focus to the previous window when appropriate. The separate visibility shortcut pauses or resumes the whole island.
 
 ## Services
 

@@ -91,6 +91,7 @@ ULONGLONG shortcutCaptureUntil=0,shortcutIgnoreUntil=0;
 bool shortcutAwaitRelease=false;
 hext::Shortcut shortcutReleaseGuard;
 bool shortcutOverlay=false,shortcutClosing=false,shortcutHold=false;
+DWORD shortcutLayerError=0;
 HWND shortcutReturnWindow=nullptr;
 Spring timerX{590,0,590},timerY{294,0,294},timerSize{34,0,34},timerSymbol;
 Spring timerButtonX{224,0,224},timerButtonY{365,0,365},timerButtonW{138,0,138},timerButtonH{30,0,30};
@@ -475,7 +476,10 @@ bool desktopIsForeground() {
     return query.exposed;
 }
 void placeOnDesktop() {
-    if(shortcutOverlay){SetWindowPos(windowHandle,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);return;}
+    if(shortcutOverlay){
+        shortcutLayerError=SetWindowPos(windowHandle,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE)?0:GetLastError();
+        return;
+    }
     HWND host=desktopHost=findDesktopHost();
     HWND above=host?GetWindow(host,GW_HWNDPREV):nullptr;
     while(above==windowHandle)above=GetWindow(above,GW_HWNDPREV);
@@ -540,6 +544,7 @@ void restackDesktop(){
 }
 void updateVisibility() {
     if(testMode)return;
+    if(shortcutOverlay&&!(GetWindowLongPtrW(windowHandle,GWL_EXSTYLE)&WS_EX_TOPMOST))placeOnDesktop();
     POINT mouse;GetCursorPos(&mouse);
     auto now=GetTickCount64();
     desktopEligible=desktopEntry.update(now,desktopIsForeground())||shortcutOverlay;
@@ -1045,6 +1050,15 @@ LRESULT CALLBACK procedure(HWND wnd,UINT message,WPARAM wp,LPARAM lp){
         return 0;
     case WM_APP+8:
         commitShortcut({static_cast<UINT>(lp),static_cast<UINT>(wp)});return 0;
+    case WM_APP+9:
+        // Read-only state for the runtime verifier; no paths, credentials or user data.
+        if(wp==1)return GetWindowLongPtrW(wnd,GWL_EXSTYLE);
+        if(wp==2)return shortcutLayerError;
+        if(wp==3)return GetForegroundWindow()==windowHandle||
+            (IsWindow(shortcutReturnWindow)&&isAbove(windowHandle,shortcutReturnWindow));
+        return (expanded?1:0)|(shortcutOverlay?2:0)|(shortcutClosing?4:0)|(hidden?8:0)|
+            (windowShown?16:0)|(shortcutHold?32:0)|(desktopEligible?64:0)|
+            (shortcuts.registeredIDs[0]<<8)|(shortcuts.registeredIDs[1]<<12);
     case WM_ERASEBKGND:return 1;
     case WM_SETFOCUS:if(assistantFocused)resetAssistantCaret();return 0;
     case WM_KILLFOCUS:

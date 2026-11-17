@@ -16,7 +16,7 @@ The console suite checks springs, desktop-region overlap, visibility, presentati
 
 `--verify-render` exports native frames and exercises controls in a hidden window. Animation fixtures explicitly enable motion, regardless of a build runner's Windows preferences; reduced motion is also tested separately. Hardware and audio devices are read, but volume, default endpoints, Bluetooth pairing, and live effects are not changed. Effect-enabled, unavailable-device, capture, and conflict images are explicit renderer fixtures. The optional `tests/visual-check.py` checks pixel alignment and requires Pillow and NumPy for development only.
 
-`--verify-hardware` reads local sensors. `--verify-connection` checks the selected CLI without inference. `--record-motion` exports a 600-frame renderer sequence without recording the desktop. The runtime shortcut script operates only on Hext's own window after deployment; it briefly opens and closes the real panel.
+`--verify-hardware` reads local sensors. `--verify-connection` checks the selected CLI without inference. `--record-motion` exports a 600-frame renderer sequence without recording the desktop. The runtime shortcut script operates only on Hext's own window after deployment; it briefly opens and closes the real panel. It queries non-sensitive state flags, uses the registered shortcut IDs, and waits for observable states instead of assuming fixed startup timings.
 
 Build `addon-test.exe` through `scripts/test.ps1`, then use `app/dist/addon-test.exe --download` to test the published add-on download and pinned digest. This test downloads but never runs the installer. Network and normal Windows desktop access may require running outside a restricted development sandbox.
 
