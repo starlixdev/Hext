@@ -17,12 +17,13 @@ struct DesktopEntry {
 enum class PresentationAction {None, Hide, RestoreCompact, Restack};
 struct PresentationState {
     bool desktop, paused, logicalShown, nativeVisible, minimized, desktopAbove;
+    bool fadingOut=false;
 };
 // Explorer may hide/minimize/reorder a window without changing our logical state.
 inline PresentationAction reconcilePresentation(PresentationState s) {
     if(!s.desktop||s.paused)
         return s.logicalShown||s.nativeVisible?PresentationAction::Hide:PresentationAction::None;
-    if(!s.logicalShown||!s.nativeVisible||s.minimized)return PresentationAction::RestoreCompact;
+    if(!s.logicalShown||!s.nativeVisible||s.minimized||s.fadingOut)return PresentationAction::RestoreCompact;
     if(s.desktopAbove)return PresentationAction::Restack;
     return PresentationAction::None;
 }

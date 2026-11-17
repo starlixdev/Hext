@@ -23,16 +23,19 @@ int main(){
     // Desktop was raised over a visible, restored island.
     assert(reconcilePresentation({true,false,true,true,false,true})==A::Restack);
     assert(reconcilePresentation({true,false,true,true,false,false})==A::None);
+    assert(reconcilePresentation({true,false,true,true,false,false,true})==A::RestoreCompact);
+    assert(reconcilePresentation({false,false,true,true,false,false,true})==A::Hide);
+    assert(reconcilePresentation({true,true,true,true,false,false,true})==A::Hide);
     assert(reconcilePresentation({false,false,true,true,true,true})==A::Hide);
     assert(reconcilePresentation({true,true,true,true,false,true})==A::Hide);
     assert(reconcilePresentation({false,false,false,false,false,true})==A::None);
-    for(int bits=0;bits<64;bits++){
+    for(int bits=0;bits<128;bits++){
         PresentationState s{bool(bits&1),bool(bits&2),bool(bits&4),
-                            bool(bits&8),bool(bits&16),bool(bits&32)};
+                            bool(bits&8),bool(bits&16),bool(bits&32),bool(bits&64)};
         auto a=reconcilePresentation(s);
         if(!s.desktop||s.paused)assert(a!=A::RestoreCompact&&a!=A::Restack);
-        if(s.desktop&&!s.paused&&(!s.logicalShown||!s.nativeVisible||s.minimized))
+        if(s.desktop&&!s.paused&&(!s.logicalShown||!s.nativeVisible||s.minimized||s.fadingOut))
             assert(a==A::RestoreCompact);
     }
-    std::cout<<"PASS: Show Desktop recovery (hidden, minimized, behind desktop), app suppression and pause.\n";
+    std::cout<<"PASS: Show Desktop recovery (hidden, minimized, behind desktop and interrupted fade), app suppression and pause.\n";
 }

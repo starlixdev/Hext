@@ -452,6 +452,9 @@ bool isAbove(HWND upper,HWND lower) {
     return false;
 }
 bool desktopIsForeground() {
+    // Explorer can expose the desktop before all application windows have updated
+    // their minimized/cloaked/z-order metadata. Actual desktop focus wins that race.
+    if(isDesktop(GetForegroundWindow()))return true;
     // Test the compact island's footprint, rather than the foreground app's identity.
     // Enumerating in z-order also handles Explorer's Show Desktop restacking.
     struct Query {hext::Region island;bool exposed=true;};
@@ -469,7 +472,17 @@ bool desktopIsForeground() {
         if(cloaked)return TRUE;
         RECT frame{};if(SUCCEEDED(DwmGetWindowAttribute(candidate,DWMWA_EXTENDED_FRAME_BOUNDS,&frame,sizeof(frame))))bounds=frame;
         if(hext::coversIsland(q.island,{bounds.left,bounds.top,bounds.right,bounds.bottom},true,false,false)){
-            q.exposed=false;return FALSE;
+            // A visible bounding rectangle alone is insufficient during Show Desktop.
+            // Confirm an app surface is actually exposed in the overlapping region.
+            long l=std::max(q.island.left,bounds.left),r=std::min(q.island.right,bounds.right)-1;
+            long t=std::max(q.island.top,bounds.top),b=std::min(q.island.bottom,bounds.bottom)-1;
+            for(long x:{l,(l+r)/2,r})for(long y:{t,(t+b)/2,b}){
+                HWND surface=WindowFromPoint(POINT{x,y});
+                HWND root=surface?GetAncestor(surface,GA_ROOT):nullptr;
+                if(root&&root!=windowHandle&&!isDesktop(root)){
+                    q.exposed=false;return FALSE;
+                }
+            }
         }
         return TRUE;
     },reinterpret_cast<LPARAM>(&query));
@@ -547,18 +560,18 @@ void updateVisibility() {
     if(shortcutOverlay&&!(GetWindowLongPtrW(windowHandle,GWL_EXSTYLE)&WS_EX_TOPMOST))placeOnDesktop();
     POINT mouse;GetCursorPos(&mouse);
     auto now=GetTickCount64();
-    desktopEligible=desktopEntry.update(now,desktopIsForeground())||shortcutOverlay;
     bool checkOrder=now-lastDesktopOrderCheck>=400;
     if(!IsWindow(desktopHost)||checkOrder){
         desktopHost=findDesktopHost();lastDesktopOrderCheck=now;
     }
+    desktopEligible=desktopEntry.update(now,desktopIsForeground())||shortcutOverlay;
     RECT bounds{};GetWindowRect(windowHandle,&bounds);
     bool inside=windowShown&&IsWindowVisible(windowHandle)&&!IsIconic(windowHandle)&&
         (PtInRect(&bounds,mouse)||dragVolume||dragColor||dragSound||navigationHeld||menuOpen||shortcutHold||captureShortcut>=0);
     auto change=visibility.update(now,desktopEligible,!expanded&&inside,inside,hidden);
     auto repair=reconcilePresentation({desktopEligible,hidden,windowShown,
         IsWindowVisible(windowHandle)!=FALSE,IsIconic(windowHandle)!=FALSE,
-        checkOrder&&isAbove(desktopHost,windowHandle)});
+        checkOrder&&isAbove(desktopHost,windowHandle),appearance.target==0});
     if(repair==PresentationAction::Hide){
         beginDesktopExit();
         return;
@@ -1481,6 +1494,14 @@ int verifyRenderer(const std::filesystem::path& directory) {
         if(i==5)fadeValid=fadeValid&&appearance.value>.1&&appearance.value<.75;
     }
     check(fadeValid&&appearance.value>.99,"desktop entry fades progressively without overshoot");
+    beginDesktopExit();stepMotion(.04);render();
+    check(appearance.target==0&&appearance.value>0,"desktop exit can be interrupted before native hiding");
+    auto interruptedReturn=reconcilePresentation({true,false,true,true,false,false,appearance.target==0});
+    check(interruptedReturn==PresentationAction::RestoreCompact,"returning desktop cancels an in-flight exit even while WS_VISIBLE is still set");
+    restoreDesktopCompact();
+    check(appearance.target==1&&width.value==184&&height.value==42,"interrupted exit restores a fresh compact frame instead of retaining a hidden target");
+    for(int frame=0;frame<60;frame++){stepMotion(1.0/60);render();}
+    check(lastPresentedAlpha==255,"compact island becomes fully visible after interrupted exit recovery");
     beginDesktopExit();previousAlpha=1;fadeValid=true;
     for(int i=0;i<60;i++){
         stepMotion(1.0/60);render();

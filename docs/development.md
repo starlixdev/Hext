@@ -18,6 +18,8 @@ The console suite checks springs, desktop-region overlap, visibility, presentati
 
 `--verify-hardware` reads local sensors. `--verify-connection` checks the selected CLI without inference. `--record-motion` exports a 600-frame renderer sequence without recording the desktop. The runtime shortcut script operates only on Hext's own window after deployment; it briefly opens and closes the real panel. It queries non-sensitive state flags, uses the registered shortcut IDs, and waits for observable states instead of assuming fixed startup timings.
 
+`app/tests/verify-desktop-recovery.ps1` performs a live desktop regression check. It temporarily minimizes applications, uses an owned window to cover and expose the island three times, and restores the previous applications afterward. It checks that normal compact presence returns without opening another app. It does not capture the screen or inject keys, and is run interactively rather than on CI. The hidden renderer separately checks a return that interrupts an exit fade.
+
 Build `addon-test.exe` through `scripts/test.ps1`, then use `app/dist/addon-test.exe --download` to test the published add-on download and pinned digest. This test downloads but never runs the installer. Network and normal Windows desktop access may require running outside a restricted development sandbox.
 
 ## Releases
