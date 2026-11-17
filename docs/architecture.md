@@ -14,8 +14,7 @@ The normal island stays above desktop icons and below application windows. Expli
 
 - `assistant.h` runs CLI probes and requests asynchronously, with a cancellable job.
 - `hardware.h` reads native and optional sensor providers outside rendering.
-- `sound.h` reads and edits Core Audio endpoints and device-scoped APO configuration.
-- `audio-addon.h` downloads one pinned audio installer, reports progress, verifies SHA-256, and separates downloading from installation.
+- `sound.h` reads and edits Core Audio endpoints and enumerates Bluetooth devices.
 - `shortcuts.h` acquires replacement global shortcuts before releasing working ones.
 
 Only shortcut editing installs a temporary keyboard hook. It stops on save, cancellation, lost focus, page change, or timeout. No typed text is logged. Basic MSAA names, roles, values, and actions are exposed for custom controls; complete assistive-technology validation remains pending.

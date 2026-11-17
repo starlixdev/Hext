@@ -24,17 +24,10 @@ Change both global shortcuts in **Personalizar → Geral**. Hext checks whether 
 
 - Assistant adapters for Codex CLI, Claude Code, and a configurable text CLI. Connection checks verify installation, required options, and authentication. Hext does not include a model or a paid assistant subscription.
 - Output and input device selection, volume, mute, stereo balance, explicit default-device switching, and Bluetooth management through Windows.
-- Optional audio amplification and equalization through the downloadable Hext Audio add-on.
 - Timers, local commands, CPU and GPU readings, RAM usage, and temporary file shortcuts.
 - A reorderable sidebar, recent accent colors, a color wheel, material and scale settings, and reduced motion.
 
 Voice recognition and notification access are not implemented. The voice animation is a labeled preview. Hardware temperatures and power depend on available sensors; missing values remain unavailable.
-
-## Audio add-on
-
-Open **Som → Efeitos** and choose **Baixar add-on**. Hext downloads the pinned installer from this repository's GitHub Release, verifies its size and SHA-256, and then presents **Instalar add-on**. Installation is a separate action. Select an output through **Configurar saída** and follow the audio component's setup instructions.
-
-Hext Audio reuses the unmodified [EqualizerAPO-XT](https://github.com/115dkk/EqualizerAPO-XT) SSE2 installer. The add-on release includes the corresponding upstream source archive and licenses. Hext supplies device-scoped controls and the download flow; it does not replace the upstream audio engine. See [Audio](docs/audio.md) for limitations and removal instructions.
 
 ## Build and test
 
@@ -52,9 +45,8 @@ The hidden renderer exports images and checks interaction states without recordi
 
 ```text
 app/                 Windows application, resources, and tests
-addons/audio/        Pinned upstream metadata and redistribution licenses
 docs/                Usage, architecture, design, and development notes
-scripts/             Tests, packaging, and add-on release preparation
+scripts/             Tests and clean release packaging
 .github/             CI, release workflow, and contribution templates
 ```
 
@@ -64,4 +56,4 @@ Read [Assistant setup](docs/assistant.md), [Hardware readings](docs/hardware.md)
 
 ## License and credits
 
-Hext is distributed under [GPL-3.0-or-later](LICENSE). EqualizerAPO-XT retains its upstream copyright and license terms; see [Third-party notices](THIRD_PARTY_NOTICES.md). Apple motion guidance and Kobi informed the interaction design. Hext uses Windows fonts and icons, and is not affiliated with Apple or Kobi.
+Hext is distributed under [GPL-3.0-or-later](LICENSE). See [Third-party notices](THIRD_PARTY_NOTICES.md) for historical redistribution credits. Apple motion guidance and Kobi informed the interaction design. Hext uses Windows fonts and icons, and is not affiliated with Apple or Kobi.

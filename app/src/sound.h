@@ -6,11 +6,8 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
-#include <sstream>
-#include <iomanip>
 
 namespace hext {
-inline constexpr PROPERTYKEY DisableSystemEffects={{0x1da5d803,0xd492,0x4edd,{0x8c,0x23,0xe0,0xc0,0xff,0xee,0x7f,0x0e}},5};
 template<class T> struct AudioPtr {
     T* p=nullptr;
     ~AudioPtr(){if(p)p->Release();}
@@ -193,126 +190,6 @@ public:
     bool poll(BluetoothSnapshot& out){
         if(!changed.exchange(false))return false;
         std::lock_guard<std::mutex> lock(mutex);out=result;return true;
-    }
-};
-
-struct AudioEffects {
-    int gain=0,bass=0,mid=0,treble=0; // tenths of a decibel
-    bool enabled=false;
-    static bool validID(const std::wstring& id){
-        // Use only the endpoint's GUID, never names or arbitrary configuration text.
-        size_t start=id.find_last_of(L'{');if(start==std::wstring::npos||id.size()-start!=38)return false;
-        GUID guid{};return SUCCEEDED(CLSIDFromString(id.substr(start).c_str(),&guid));
-    }
-    static std::wstring endpointGUID(const std::wstring& id){return validID(id)?id.substr(id.find_last_of(L'{')):L"";}
-    bool valid()const{return gain>=0&&gain<=120&&bass>=-120&&bass<=120&&mid>=-120&&mid<=120&&treble>=-120&&treble<=120;}
-    std::string configuration(const std::wstring& id)const{
-        if(!validID(id)||!valid())return {};
-        auto guid=endpointGUID(id);std::string g(guid.begin(),guid.end());
-        std::ostringstream out;out.imbue(std::locale::classic());out<<std::fixed<<std::setprecision(1);
-        out<<"# Managed by Hext. Only the selected playback endpoint.\nDevice: "<<g<<"\nStage: post-mix\nChannel: all\n";
-        out<<"Preamp: "<<(enabled?gain/10.0:0)<<" dB\n";
-        if(enabled){out<<"Filter: ON LS Fc 120 Hz Gain "<<bass/10.0<<" dB\n";
-            out<<"Filter: ON PK Fc 1000 Hz Gain "<<mid/10.0<<" dB Q 0.8\n";
-            out<<"Filter: ON HS Fc 6000 Hz Gain "<<treble/10.0<<" dB\n";}
-        out<<"Device: all\n";return out.str();
-    }
-};
-inline std::wstring audioRegString(HKEY hive,const std::wstring& key,const wchar_t* value){
-    wchar_t data[32768]{};DWORD bytes=sizeof(data);
-    if(RegGetValueW(hive,key.c_str(),value,RRF_RT_REG_SZ,nullptr,data,&bytes)!=ERROR_SUCCESS)return L"";
-    return data;
-}
-struct ApoInstallation {
-    std::filesystem::path root,config,selector;
-    bool installed=false;
-    void detect(){
-        auto install=audioRegString(HKEY_LOCAL_MACHINE,L"SOFTWARE\\EqualizerAPO",L"InstallPath");
-        if(install.empty()){wchar_t program[32768]{};GetEnvironmentVariableW(L"ProgramFiles",program,32768);install=std::wstring(program)+L"\\EqualizerAPO";}
-        root=install;
-        wchar_t local[32768]{};GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);
-        std::error_code ec;
-        auto hasSelector=[&](const std::filesystem::path& path){return std::filesystem::is_regular_file(path/L"DeviceSelector.exe",ec)||std::filesystem::is_regular_file(path/L"Configurator.exe",ec);};
-        if(!hasSelector(root)&&local[0]){
-            for(auto variant:{L"x64-sse2",L"x64-avx",L"x64-avx2",L"x64-avx512",L"x64-avx10-1"}){
-                auto candidate=std::filesystem::path(local)/(std::wstring(L"EqualizerAPO-XT-")+variant)/L"current";
-                if(hasSelector(candidate)){root=candidate;break;}
-            }
-        }
-        auto configured=audioRegString(HKEY_LOCAL_MACHINE,L"SOFTWARE\\EqualizerAPO",L"ConfigPath");
-        config=configured.empty()?root/L"config":std::filesystem::path(configured);
-        selector=std::filesystem::is_regular_file(root/L"DeviceSelector.exe",ec)?root/L"DeviceSelector.exe":root/L"Configurator.exe";
-        installed=hasSelector(root);
-    }
-    bool endpointConfigured(const std::wstring& id)const{
-        auto guid=AudioEffects::endpointGUID(id);if(!installed||guid.empty())return false;
-        AudioPtr<IMMDeviceEnumerator> enumerator;
-        if(FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator),nullptr,CLSCTX_INPROC_SERVER,__uuidof(IMMDeviceEnumerator),reinterpret_cast<void**>(&enumerator.p))))return false;
-        AudioPtr<IMMDevice> device;if(FAILED(enumerator->GetDevice(id.c_str(),&device.p)))return false;
-        AudioPtr<IPropertyStore> properties;
-        if(SUCCEEDED(device->OpenPropertyStore(STGM_READ,&properties.p))){
-            PROPVARIANT disabled;PropVariantInit(&disabled);
-            bool bypass=SUCCEEDED(properties->GetValue(DisableSystemEffects,&disabled))&&disabled.vt==VT_UI4&&disabled.ulVal!=0;
-            PropVariantClear(&disabled);if(bypass)return false;
-        }
-        HKEY fx=nullptr;auto key=L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MMDevices\\Audio\\Render\\"+guid+L"\\FxProperties";
-        if(RegOpenKeyExW(HKEY_LOCAL_MACHINE,key.c_str(),0,KEY_READ,&fx)!=ERROR_SUCCESS)return false;
-        bool found=false;
-        for(DWORD i=0;!found;i++){
-            wchar_t name[512];DWORD length=512,type=0,bytes=8192;wchar_t data[4096]{};
-            auto status=RegEnumValueW(fx,i,name,&length,nullptr,&type,reinterpret_cast<BYTE*>(data),&bytes);
-            if(status==ERROR_NO_MORE_ITEMS)break;
-            if(status!=ERROR_SUCCESS||(type!=REG_SZ&&type!=REG_MULTI_SZ))continue;
-            std::wstring values(data,std::min<size_t>(bytes/sizeof(wchar_t),4096));
-            size_t pos=0;
-            while((pos=values.find(L'{',pos))!=std::wstring::npos){
-                if(pos+38>values.size())break;
-                auto cls=values.substr(pos,38);GUID valid{};
-                if(SUCCEEDED(CLSIDFromString(cls.c_str(),&valid))){
-                    auto dll=audioRegString(HKEY_CLASSES_ROOT,L"CLSID\\"+cls+L"\\InprocServer32",nullptr);
-                    std::transform(dll.begin(),dll.end(),dll.begin(),::towlower);
-                    if(dll.find(L"equalizerapo")!=std::wstring::npos)found=true;
-                }pos+=38;
-            }
-        }
-        RegCloseKey(fx);return found;
-    }
-    // Called by the explicit, elevated helper only. No arbitrary file or config input.
-    int apply(const std::wstring& id,const AudioEffects& effects){
-        if(!effects.valid()||!AudioEffects::validID(id))return 1;
-        if(!installed)return 2;
-        SoundEngine check;check.selected[0]=id;check.refresh();auto target=check.chosen(0);
-        if(!target||target->state!=DEVICE_STATE_ACTIVE||!endpointConfigured(id))return 4;
-        return writeConfiguration(config,id,effects);
-    }
-    static int writeConfiguration(const std::filesystem::path& config,const std::wstring& id,const AudioEffects& effects){
-        auto text=effects.configuration(id);if(text.empty())return 1;
-        auto main=config/L"config.txt",own=config/L"Hext.txt",temp=config/L"Hext.pending.txt";
-        std::error_code sizeError;if(std::filesystem::file_size(main,sizeError)>4*1024*1024||sizeError)return 3;
-        std::ifstream existing(main,std::ios::binary);if(!existing)return 3;
-        std::string original((std::istreambuf_iterator<char>(existing)),{});existing.close();
-        if(original.size()>4*1024*1024)return 3;
-        if(original.size()>1&&(static_cast<unsigned char>(original[0])==0xff||static_cast<unsigned char>(original[0])==0xfe))return 3;
-        {std::ifstream previous(own,std::ios::binary);if(previous){std::string first;std::getline(previous,first);
-            if(first!="# Managed by Hext. Only the selected playback endpoint.")return 5;}}
-        bool included=false;std::istringstream lines(original);std::string line;
-        while(std::getline(lines,line)){
-            auto start=line.find_first_not_of(" \t");if(start==std::string::npos||line[start]=='#')continue;
-            auto end=line.find_last_not_of(" \t\r");auto value=line.substr(start,end-start+1);
-            std::transform(value.begin(),value.end(),value.begin(),[](unsigned char c){return std::tolower(c);});
-            if(value=="include: hext.txt")included=true;
-        }
-        {std::ofstream out(temp,std::ios::binary|std::ios::trunc);out<<text;out.close();if(!out)return 3;}
-        if(!MoveFileExW(temp.c_str(),own.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))return 3;
-        if(!included){
-            // CopyFile(TRUE) creates one backup and never replaces an older backup.
-            if(!CopyFileW(main.c_str(),(config/L"config.before-hext.txt").c_str(),TRUE)&&GetLastError()!=ERROR_FILE_EXISTS)return 3;
-            auto pending=config/L"config.hext.pending.txt";
-            std::ofstream out(pending,std::ios::binary|std::ios::trunc);out<<original<<"\n# Hext audio effects\nDevice: all\nInclude: Hext.txt\n";
-            out.close();if(!out)return 3;
-            if(!MoveFileExW(pending.c_str(),main.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))return 3;
-        }
-        return 0;
     }
 };
 }

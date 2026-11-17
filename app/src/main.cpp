@@ -34,7 +34,6 @@
 #include "hardware.h"
 #include "navigation.h"
 #include "sound.h"
-#include "audio-addon.h"
 #include "shortcuts.h"
 
 template<class T> void release(T*& p) {if(p){p->Release();p=nullptr;}}
@@ -114,14 +113,9 @@ std::array<Spring,7> navigationRows;
 hext::SoundEngine sound;
 hext::BluetoothDevices bluetooth;
 hext::BluetoothSnapshot bluetoothSnapshot;
-hext::ApoInstallation audioApo;
-hext::AudioEffects audioEffects;
-hext::AudioAddon audioAddon;
 int soundTab=0,soundChooser=-1,soundDeviceOffset=0,bluetoothOffset=0,bluetoothSelected=-1,dragSound=0;
 Spring soundTabVisual,soundPageFade{1,0,1};
-bool apoEndpointReady=false,soundEffectsDirty=false;
 ULONGLONG lastBluetoothRefresh=0;
-HANDLE audioEffectsProcess=nullptr;
 std::wstring soundStatus;
 int navigationCandidate=-1;
 bool navigationHeld=false,navigationDragging=false;
@@ -269,13 +263,10 @@ void hit(int id,float x,float y,float w,float h,const std::wstring& name=L""){
 }
 UINT accentForeground(){return hext::foreground(accent());}
 bool controlEnabled(int id){
-    if(id==1046){auto state=audioAddon.snapshot().state;return state!=hext::AddonState::Downloading&&state!=hext::AddonState::Installing;}
     if(id==1020||id==1021)return sound.reading[id-1020].ready;
     if(id==1022||id==1023){auto item=sound.chosen(id-1022);return item&&item->state==DEVICE_STATE_ACTIVE&&!item->isDefault;}
     if(id==1030||id==1031)return sound.reading[id-1030].ready;
     if(id==1032)return sound.reading[0].ready&&sound.reading[0].channels==2;
-    if(id==1040||(id>=1041&&id<=1044))return audioApo.installed&&apoEndpointReady&&!audioEffectsProcess;
-    if(id==1045)return soundEffectsDirty&&audioApo.installed&&apoEndpointReady&&!audioEffectsProcess;
     if(id==1050)return !bluetooth.refreshing();
     if(id==1052||id==1053||id==1054)return bluetoothSelected>=0&&bluetoothSelected<static_cast<int>(bluetoothSnapshot.devices.size());
     return !((id==317||id==902)&&(!systemTransparency||highContrast))&&!(id==311&&systemReducedMotion)&&
@@ -388,9 +379,6 @@ void saveConfig(){
         save((L"shortcutKey"+std::to_wstring(i)).c_str(),shortcuts.bindings[i].key);
     }
     for(int i=0;i<2;i++)WritePrivateProfileString(L"Som",i?L"input":L"output",sound.selected[i].c_str(),configPath.c_str());
-    auto saveSound=[](const wchar_t* key,int value){WritePrivateProfileStringW(L"Som",key,std::to_wstring(value).c_str(),configPath.c_str());};
-    saveSound(L"enabled",audioEffects.enabled);saveSound(L"gain",audioEffects.gain);saveSound(L"bass",audioEffects.bass);
-    saveSound(L"mid",audioEffects.mid);saveSound(L"treble",audioEffects.treble);
     for(int i=1;i<4;i++)WritePrivateProfileString(L"Ilha",(L"assistantPath"+std::to_wstring(i)).c_str(),
         assistantPath[i].c_str(),configPath.c_str());
 }
@@ -1163,7 +1151,7 @@ LRESULT CALLBACK procedure(HWND wnd,UINT message,WPARAM wp,LPARAM lp){
             int delta=GET_WHEEL_DELTA_WPARAM(wp)>0?-4:4;
             if(soundChooser>=0){int count=static_cast<int>(std::count_if(sound.devices.begin(),sound.devices.end(),[](const auto& d){return d.flow==soundChooser;}));
                 soundDeviceOffset=std::clamp(soundDeviceOffset+delta,0,std::max(0,((count-1)/4)*4));}
-            else if(soundTab==3)bluetoothOffset=std::clamp(bluetoothOffset+delta,0,std::max(0,((static_cast<int>(bluetoothSnapshot.devices.size())-1)/4)*4));
+            else if(soundTab==2)bluetoothOffset=std::clamp(bluetoothOffset+delta,0,std::max(0,((static_cast<int>(bluetoothSnapshot.devices.size())-1)/4)*4));
             invalidate();return 0;
         }
         if(page==0){assistantScroll=std::clamp(assistantScroll+GET_WHEEL_DELTA_WPARAM(wp)/120.0f*60,0.0f,assistantScrollMax);invalidate();}
@@ -1172,7 +1160,7 @@ LRESULT CALLBACK procedure(HWND wnd,UINT message,WPARAM wp,LPARAM lp){
         if(captureShortcut>=0){if(wp==VK_ESCAPE){cancelShortcutCapture();invalidate();}return 0;}
         if(page==6&&soundChooser>=0&&wp==VK_ESCAPE){soundChooser=-1;invalidate();return 0;}
         if(soundSlider(keyboardId)&&(wp==VK_LEFT||wp==VK_RIGHT||wp==VK_UP||wp==VK_DOWN||wp==VK_HOME||wp==VK_END)){
-            float step=keyboardId==1041?1/24.f:keyboardId>=1042?1/48.f:.02f;
+            constexpr float step=.02f;
             soundSliderValue(keyboardId,wp==VK_HOME?0:wp==VK_END?1:soundSliderPosition(keyboardId)+(wp==VK_LEFT||wp==VK_DOWN?-step:step));return 0;
         }
         if(navigationHeld&&wp==VK_ESCAPE){finishNavigationDrag(false);return 0;}
@@ -1356,7 +1344,7 @@ LRESULT CALLBACK procedure(HWND wnd,UINT message,WPARAM wp,LPARAM lp){
         }else if(wp==2){
             if(expanded&&page==6){
                 if(!dragSound&&soundChooser<0)refreshSound();
-                if(soundTab==3&&!bluetooth.refreshing()&&now-lastBluetoothRefresh>10000){bluetooth.refresh();lastBluetoothRefresh=now;}
+                if(soundTab==2&&!bluetooth.refreshing()&&now-lastBluetoothRefresh>10000){bluetooth.refresh();lastBluetoothRefresh=now;}
             }
             if(windowShown&&now-lastMaterialCheck>30000){materialDirty=true;lastMaterialCheck=now;render();}
             if(voicePreview&&now>=previewUntil){voicePreview=false;stripUntil=0;if(!expanded)setExpanded(false);}
@@ -1373,8 +1361,6 @@ LRESULT CALLBACK procedure(HWND wnd,UINT message,WPARAM wp,LPARAM lp){
             }else if(timerRunning||clock!=previousClock)render();
             previousClock=clock;
         }else if(wp==3){
-            audioAddon.poll();
-            if(page==6&&soundTab==2&&audioAddon.snapshot().state==hext::AddonState::Downloading)invalidate(100);
             if(shortcutAwaitRelease){
                 UINT mods=shortcutReleaseGuard.modifiers;
                 bool held=(GetAsyncKeyState(shortcutReleaseGuard.key)&0x8000)||
@@ -1391,7 +1377,6 @@ LRESULT CALLBACK procedure(HWND wnd,UINT message,WPARAM wp,LPARAM lp){
                 if(expanded&&(page==3||(page==5&&settingsSection==4)))render();
             }
             pollAssistantConnection();
-            pollSoundEffects();
             if(bluetooth.poll(bluetoothSnapshot)){bluetoothSelected=-1;bluetoothOffset=0;if(page==6)invalidate();}
             if(assistantBridge.poll()){
                 if(assistantBridge.exitCode==0&&!assistantBridge.result.empty()){
@@ -1412,13 +1397,11 @@ LRESULT CALLBACK procedure(HWND wnd,UINT message,WPARAM wp,LPARAM lp){
     }
     case WM_CLOSE:DestroyWindow(wnd);return 0;
     case WM_DESTROY:
-        audioAddon.stop();
         cancelShortcutCapture();shortcuts.releaseAll();
         hardwareMonitor.stop();
         assistantBridge.cancel();
         connectionProbe.cancel();
         if(loginProcess){CloseHandle(loginProcess);loginProcess=nullptr;}
-        if(audioEffectsProcess){CloseHandle(audioEffectsProcess);audioEffectsProcess=nullptr;}
         stopAnimationClock();KillTimer(wnd,2);KillTimer(wnd,3);KillTimer(wnd,4);KillTimer(wnd,5);tray(false);disconnectAudio();
         if(foregroundHook){UnhookWinEvent(foregroundHook);foregroundHook=nullptr;}
         release(accessibleUI);
@@ -1620,11 +1603,15 @@ int verifyRenderer(const std::filesystem::path& directory) {
     bluetooth.refresh(false);
     for(int wait=0;wait<300&&bluetooth.refreshing();wait++)Sleep(10);
     bluetooth.poll(bluetoothSnapshot);
-    for(int tab=0;tab<4;tab++){
+    for(int tab=0;tab<3;tab++){
         soundTab=tab;soundTabVisual.snap(tab);soundPageFade.snap(1);soundChooser=-1;render();
         bool valid=true;std::set<int> soundIDs;
         for(const auto& h:hits)valid=valid&&h.rect.left>=0&&h.rect.right<=736&&h.rect.top>=0&&h.rect.bottom<=470&&soundIDs.insert(h.id).second&&!h.name.empty();
         check(valid&&SUCCEEDED(lastRenderResult),"sound tab has named unique controls inside the island");
+        check(std::none_of(hits.begin(),hits.end(),[](const Hit& h){return h.id>=1040&&h.id<=1048;}),
+              "sound tabs expose no removed add-on or effects controls");
+        check(std::count_if(hits.begin(),hits.end(),[](const Hit& h){return h.id>=1000&&h.id<=1002;})==3,
+              "sound navigation contains output input and Bluetooth only");
         check(exportFrame(directory/("sound-"+std::to_string(tab)+".bmp")),"export native sound tab using real read-only device enumeration");
     }
     soundTab=0;soundTabVisual.snap(0);soundChooser=0;render();
@@ -1634,14 +1621,6 @@ int verifyRenderer(const std::filesystem::path& directory) {
     check(!controlEnabled(1020)&&!controlEnabled(1030)&&!controlEnabled(1032),"disconnected endpoint disables mute volume and balance");
     check(exportFrame(directory/"sound-unavailable.bmp"),"export no-endpoint fixture");
     refreshSound();
-    bool wasInstalled=audioApo.installed,wasApoReady=apoEndpointReady;auto originalEffects=audioEffects;
-    audioApo.installed=true;apoEndpointReady=true;soundTab=2;soundTabVisual.snap(2);audioEffects.enabled=true;audioEffects.gain=60;
-    audioEffects.bass=20;audioEffects.mid=0;audioEffects.treble=-15;soundEffectsDirty=true;render();
-    check(exportFrame(directory/"sound-effects-fixture.bmp"),"export configured-effects fixture without applying filters");
-    check(controlEnabled(1045),"only configured endpoint enables applying effects");
-    apoEndpointReady=false;
-    check(!controlEnabled(1045)&&!controlEnabled(1041),"unconfigured endpoint cannot claim amplification is available");
-    audioApo.installed=wasInstalled;apoEndpointReady=wasApoReady;audioEffects=originalEffects;soundEffectsDirty=false;
     soundTab=0;soundTabVisual.snap(0);changePage(5);settingsSection=4;
     unsigned originalMetrics=metricMask;
     metricMask=hext::AllMetrics;
@@ -2001,30 +1980,13 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     bool connectionCheck=std::wstring(arguments).find(L"--verify-connection")!=std::wstring::npos;
     bool hardwareCheck=std::wstring(arguments).find(L"--verify-hardware")!=std::wstring::npos;
     testMode=recording||connectionCheck||hardwareCheck||std::wstring(arguments).find(L"--verify-render")!=std::wstring::npos;
-    bool effectsHelper=std::wstring(arguments).rfind(L"--apply-audio-effects",0)==0;
-    HANDLE single=testMode||effectsHelper?nullptr:CreateMutex(nullptr,FALSE,L"Local\\HextIsland");
-    if(!testMode&&!effectsHelper&&GetLastError()==ERROR_ALREADY_EXISTS){
+    HANDLE single=testMode?nullptr:CreateMutex(nullptr,FALSE,L"Local\\HextIsland");
+    if(!testMode&&GetLastError()==ERROR_ALREADY_EXISTS){
         MessageBox(nullptr,L"O Hext já está aberto. Passe o mouse no centro superior da área de trabalho.",L"Hext",MB_OK);
         if(single)CloseHandle(single);
         return 0;
     }
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
-    int argumentCount=0;auto argv=CommandLineToArgvW(GetCommandLineW(),&argumentCount);
-    if(argv&&argumentCount>1&&std::wstring(argv[1])==L"--apply-audio-effects"){
-        int result=1;
-        if(argumentCount==8){
-            auto integer=[](const wchar_t* s,int& value){wchar_t* end=nullptr;long n=wcstol(s,&end,10);
-                if(!s[0]||*end||n<-120||n>120)return false;
-                value=static_cast<int>(n);return true;};
-            int enabled=0;hext::AudioEffects effects;
-            if(integer(argv[3],enabled)&&enabled>=0&&enabled<=1&&integer(argv[4],effects.gain)&&integer(argv[5],effects.bass)&&
-                integer(argv[6],effects.mid)&&integer(argv[7],effects.treble)){
-                effects.enabled=enabled!=0;hext::ApoInstallation installation;installation.detect();result=installation.apply(argv[2],effects);
-            }
-        }
-        LocalFree(argv);CoUninitialize();if(single)CloseHandle(single);return result;
-    }
-    if(argv)LocalFree(argv);
     wchar_t path[32768];GetModuleFileName(nullptr,path,32768);configPath=path;
     configPath=configPath.substr(0,configPath.find_last_of(L"\\/")+1)+L"hext.ini";
     auto setting=[](const wchar_t* key,int fallback){return static_cast<int>(GetPrivateProfileInt(L"Ilha",key,fallback,configPath.c_str()));};
@@ -2051,10 +2013,6 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     for(int i=0;i<2;i++){
         wchar_t saved[32768]{};GetPrivateProfileStringW(L"Som",i?L"input":L"output",L"",saved,32768,configPath.c_str());sound.selected[i]=saved;
     }
-    auto soundSetting=[](const wchar_t* key,int fallback){return static_cast<int>(GetPrivateProfileIntW(L"Som",key,fallback,configPath.c_str()));};
-    audioEffects.enabled=soundSetting(L"enabled",0)!=0;audioEffects.gain=std::clamp(soundSetting(L"gain",0),0,120);
-    audioEffects.bass=std::clamp(soundSetting(L"bass",0),-120,120);audioEffects.mid=std::clamp(soundSetting(L"mid",0),-120,120);
-    audioEffects.treble=std::clamp(soundSetting(L"treble",0),-120,120);
     for(int i=1;i<4;i++){
         wchar_t saved[32768]{};
         GetPrivateProfileString(L"Ilha",(L"assistantPath"+std::to_wstring(i)).c_str(),L"",saved,32768,configPath.c_str());

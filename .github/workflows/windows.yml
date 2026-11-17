@@ -68,16 +68,6 @@ jobs:
         with:
           name: Hext-Windows-x64
           path: release/app
-      - name: Prepare verified upstream add-on
-        run: ./scripts/prepare-audio-addon.ps1
-      - name: Publish add-on with matching source and licenses
-        run: |
-          $taskMeta = Get-Content addons/audio/upstream.json -Raw | ConvertFrom-Json
-          gh release view $taskMeta.release_tag --repo $env:GITHUB_REPOSITORY 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create $taskMeta.release_tag ./release/audio/* --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Hext Audio $($taskMeta.version)" --notes-file ./release/audio/NOTICE.txt --latest=false
-            if ($LASTEXITCODE -ne 0) { throw 'Could not publish audio add-on' }
-          }
       - name: Publish application
         run: |
           $taskVersion = (Get-Content VERSION -Raw).Trim()
@@ -85,7 +75,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             $taskAssets = Get-ChildItem release/app -Recurse -File | Where-Object {$_.Name -in @('Hext-Windows-x64.zip','SHA256SUMS.txt')}
             if ($taskAssets.Count -ne 2) { throw 'Release assets are missing' }
-            $taskNotes = "Desktop visibility based on exposed area, compact toggles, total/current page counters, editable shortcuts, and optional verified Hext Audio download. See the README for setup and known limits."
+            $taskNotes = "Removed the audio add-on, effects controls, and installer download. Native output, input, volume, balance, and Bluetooth controls remain available. See the README for setup and known limits."
             gh release create "v$taskVersion" $taskAssets.FullName --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Hext $taskVersion" --notes $taskNotes --latest
             if ($LASTEXITCODE -ne 0) { throw 'Could not publish Hext' }
           }

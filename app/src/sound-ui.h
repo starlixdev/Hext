@@ -1,7 +1,4 @@
 #pragma once
-std::wstring soundDB(int value){
-    wchar_t buffer[32];swprintf(buffer,32,L"%s%.1f dB",value>0?L"+":L"",value/10.0);return buffer;
-}
 void drawSoundSlider(int id,const std::wstring& label,const std::wstring& value,float y,float position){
     bool enabled=controlEnabled(id);UINT tint=enabled?0xEBEBF0:0x9898A4;
     text(label,204,y,332,13,tint);
@@ -61,34 +58,6 @@ void drawSoundEndpoint(int flow){
     else button(1022+flow,L"Definir como padrão",204,411,206,31);
     button(1024,L"Mais ajustes",554,411,158,31);
 }
-void drawSoundEffects(){
-    text(L"Amplificação e equalização",252,173,460,14,0xE7E7EE,true);
-    if(!audioApo.installed||!apoEndpointReady){
-        auto addon=audioAddon.snapshot();
-        bool downloading=addon.state==hext::AddonState::Downloading;
-        symbol(0xE767,432,225,42,0xBDBDC9);
-        alignedText(!audioApo.installed?L"Add-on de áudio":L"Ativar efeitos nesta saída",204,282,508,29,19,0xF2F2F6,true);
-        alignedText(audioApo.installed?L"Selecione a saída no configurador para ativar os efeitos.":L"Equalização e amplificação com Equalizer APO XT.",204,320,508,24,12,0xBDBDC8);
-        alignedText(addon.message.empty()?L"Opcional · download pelo GitHub":addon.message,204,346,508,24,11,0xBDBDC8);
-        if(downloading){
-            float progress=static_cast<float>(addon.received)/std::max(1ULL,addon.total);
-            box(284,381,348,4,0xFFFFFF,2,.12f);box(284,381,std::max(2.f,348*progress),4,accent(),2);
-            button(1048,L"Cancelar",334,404,248,34);
-            alignedText(std::to_wstring(static_cast<int>(progress*100))+L"%",640,370,60,24,11,0xBDBDC8);
-        }else button(1046,audioApo.installed?L"Configurar saída":addon.state==hext::AddonState::Ready?L"Instalar add-on":
-            addon.state==hext::AddonState::Installing?L"Instalando…":L"Baixar add-on",334,404,248,34,true);
-        return;
-    }
-    drawToggle(1040,audioEffects.enabled,204,170,36,20,controlEnabled(1040));
-    hit(1040,200,162,280,35,L"Ativar efeitos de áudio");
-    drawSoundSlider(1041,L"Amplificação",soundDB(audioEffects.gain),205,soundSliderPosition(1041));
-    drawSoundSlider(1042,L"Graves",soundDB(audioEffects.bass),257,soundSliderPosition(1042));
-    drawSoundSlider(1043,L"Médios",soundDB(audioEffects.mid),309,soundSliderPosition(1043));
-    drawSoundSlider(1044,L"Agudos",soundDB(audioEffects.treble),361,soundSliderPosition(1044));
-    button(1047,L"Redefinir",204,414,110,30);
-    button(1046,L"Configurar",326,414,110,30);
-    button(1045,audioEffectsProcess?L"Aplicando…":L"Aplicar",590,414,122,30,true);
-}
 void drawSoundBluetooth(){
     text(L"Dispositivos Bluetooth",204,174,280,14,0xE7E7EE,true);
     button(1050,bluetooth.refreshing()?L"Procurando…":L"Procurar",584,166,128,30);
@@ -122,24 +91,23 @@ void drawSoundBluetooth(){
 }
 void drawSound(){
     text(L"Som",204,87,508,21,0xF5F5F8,true);
-    const wchar_t* tabs[]={L"Saída",L"Entrada",L"Efeitos",L"Bluetooth"};
+    const wchar_t* tabs[]={L"Saída",L"Entrada",L"Bluetooth"};
+    constexpr float tabWidth=506.f/3;
     box(204,128,508,32,0xFFFFFF,9,.045f);
-    box(206+static_cast<float>(soundTabVisual.value)*126.5f,130,124.5f,28,0xFFFFFF,7,.12f);
-    for(int i=0;i<4;i++){
-        float x=206+i*126.5f;
-        if(hoverId==1000+i||keyboardId==1000+i)box(x,130,124.5f,28,0xFFFFFF,7,.045f);
-        alignedText(tabs[i],x,130,124.5f,28,12,i==soundTab?0xF3F3F8:0xBFBFCB,true);
-        hit(1000+i,x,130,124.5f,28,tabs[i]);
+    box(206+static_cast<float>(soundTabVisual.value)*tabWidth,130,tabWidth-2,28,0xFFFFFF,7,.12f);
+    for(int i=0;i<3;i++){
+        float x=206+i*tabWidth;
+        if(hoverId==1000+i||keyboardId==1000+i)box(x,130,tabWidth-2,28,0xFFFFFF,7,.045f);
+        alignedText(tabs[i],x,130,tabWidth-2,28,12,i==soundTab?0xF3F3F8:0xBFBFCB,true);
+        hit(1000+i,x,130,tabWidth-2,28,tabs[i]);
         if(keyboardId==1000+i){use(0xFFFFFF,.7f);canvas->DrawRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(x,130,x+124.5f,158),7,7),brush,1);}
+            D2D1::RoundedRect(D2D1::RectF(x,130,x+tabWidth-2,158),7,7),brush,1);}
     }
     canvas->PushLayer(D2D1::LayerParameters(D2D1::RectF(196,163,722,470),nullptr,
         D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,D2D1::IdentityMatrix(),unit(soundPageFade.value)),nullptr);
     if(soundChooser>=0)drawSoundDeviceList();
     else if(soundTab<2)drawSoundEndpoint(soundTab);
-    else if(soundTab==2)drawSoundEffects();
     else drawSoundBluetooth();
     if(!soundStatus.empty())text(soundStatus,204,447,508,10,0xD3D3DD);
-    else if(soundTab==2&&apoEndpointReady&&audioEffects.gain>0)text(L"Ganhos positivos podem distorcer o áudio.",204,449,508,10,0xBDBDC8);
     canvas->PopLayer();
 }
