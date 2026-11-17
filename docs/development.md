@@ -25,3 +25,31 @@ The console suite checks springs, desktop-region overlap, visibility, presentati
 The Windows workflow builds and tests pushes and pull requests. A push to `main` publishes the current Hext version if that version is absent. It includes a clean x64 application ZIP, documentation, and checksums. Existing release assets are not silently overwritten. No audio engine or installer is downloaded or published by this workflow.
 
 The GitHub Actions token is supplied by GitHub only at runtime. No repository secret or personal access token is required for the build. CI must be green before treating a published binary as validated. Broad Windows 10/11 hardware coverage is separate from passing software tests.
+
+## Personal assistant verification
+
+The build fetches pinned nlohmann/json 3.12.0 and SQLite 3.54.1 sources through `scripts/dependencies.ps1`, checks SHA-256, and compiles SQLite with extension loading disabled. These build-time downloads stay in ignored `app/deps`; the executable needs no additional runtime. Licenses and source references are in `THIRD_PARTY_NOTICES.md`.
+
+The console suite checks strict JSON, action parameters, autonomy/grant combinations, approval binding/replay/revocation, Spotify voice denial, DPAPI encryption, transaction rollback, bounded memory, OAuth state, and a published PKCE vector. `restart-store-test` saves data and reloads it in a separate Windows process. Default tests require no provider or Spotify account.
+
+Use a hidden process and wait before reading the controller/renderer report:
+
+```powershell
+$check = Start-Process app/dist/Hext-preview.exe -ArgumentList '--verify-personal' -WindowStyle Hidden -PassThru
+$check.WaitForExit()
+Get-Content app/dist/personal-verification.txt
+if ($check.ExitCode -ne 0) { throw 'Verification failed' }
+```
+
+This isolated instance exercises actual timer approval, denied/revoked requests, conversation save/open/rename/delete, shared/disabled memory, settings bounds, and named controls. It exports its own DIB surface without capturing the desktop. CI runs it alongside the existing renderer.
+
+Optional local tests must be reported separately:
+
+- `--verify-personal-provider`: checks real Codex authentication/sandbox, sends one inference request, and approves its timer action in an isolated Hext instance. This consumes provider usage.
+- `--verify-personal-native`: writes only the existing mute and exact integer volume back to the active output, checks denied audio dispatch, and inspects a Windows media session without playback. Add `provider` to combine both checks.
+- For application/browser native checks, first build `g++ app/tests/native-action-child.cpp -o app/dist/native-action-child.exe -std=c++17 -O2 -static -mwindows`. The native verification then launches a registered copy of this fixture and opens one non-personal browser search. It does not inspect browser content or run arbitrary user applications.
+- `personal-test.exe --live-auth-failure`: sends an intentionally invalid token to Spotify and checks a real 401, without account access or playback changes.
+- `app/tests/verify-provider-boundary.ps1`: compiles a native child and verifies denied reads/writes against generated fixtures under Codex's actual Windows sandbox. No inference is used.
+- `protected-provider-test.cpp`: optional real inference attempting to write a generated marker under the protected profile.
+
+Never publish private fixture databases, `personal-provider-debug.json`, raw login output, or user settings. Passing error handling does not establish successful Spotify OAuth/playback. Claude needs a separately installed, authenticated CLI for full validation. See [validation results](verification-0.8.0.md).

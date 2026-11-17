@@ -18,3 +18,17 @@ The normal island stays above desktop icons and below application windows. Expli
 - `shortcuts.h` acquires replacement global shortcuts before releasing working ones.
 
 Only shortcut editing installs a temporary keyboard hook. It stops on save, cancellation, lost focus, page change, or timeout. No typed text is logged. Basic MSAA names, roles, values, and actions are exposed for custom controls; complete assistive-technology validation remains pending.
+
+## Personal assistant components
+
+`personal-core.h` owns strict JSON validation, the action catalog, permission gate, one-use approval tickets, encrypted SQLite store, bounded memory, and registered-asset validation. `personal-state.h` contains controller state. `personal-runtime.h` handles conversations, context construction, dispatch, cancellation, and host-authored receipts. `personal-ui.h` draws these flows using existing controls and springs, inside the same island. `personal-verification.h` exercises the actual controller in an isolated application instance.
+
+The flow is: native input → bounded context → restricted CLI → strict JSON envelope → validate entire batch → permission gate → approval if needed → typed native executor → observed outcome. Unknown commands never become shell strings. The gate is evaluated again before dispatch. Permission revisions and conversation IDs invalidate old approvals. Failed actions stop the remaining batch.
+
+Short Core Audio and timer operations run on the UI thread. Spotify HTTPS/OAuth and Windows WinRT media-session requests run on cancellable workers. Completion is associated with the initiating conversation. Canceling cannot recall external effects already accepted. Spotify results remain outside provider context. Ordinary cancellation does not join workers on the UI thread; shutdown waits for bounded I/O to finish.
+
+`personal-net.h` uses fixed Spotify HTTPS hosts, disables redirects, validates OAuth state, and uses WinHTTP and Windows cryptography. `personal-media.h` calls GSMTC through the native WinRT ABI. Neither requires a web runtime. Existing audio, shortcuts, monitoring, desktop visibility, and island morph services remain intact.
+
+To add an action, extend exact validation in `actionRequest`, the provider schema, permission mapping, concrete executor/receipt, and denied/allowed/failure tests. New integrations must use the gate and treat external content as untrusted. Dynamically loaded executors are not supported.
+
+Persistence uses transactions, full SQLite synchronization, no WAL, secure deletion, a 64 MB page ceiling, and a one-megabyte payload limit. Each payload is DPAPI-encrypted. User drafts start transient; saved conversations autosave. Visual settings remain in `hext.ini`; private data lives under LocalAppData. Provider-owned authentication is not copied into Hext.

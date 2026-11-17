@@ -82,7 +82,7 @@ void iconButton(int id,wchar_t glyph,const std::wstring& name,float x,float y,fl
     canvas->SetTransform(original);hit(id,x,y,w,h,name);
 }
 void drawSendButton(){
-    bool busy=assistantBridge.busy;
+    bool busy=personalBusy();
     if(sendState.target!=(busy?1:0)){sendState.target=busy?1:0;sendState.frequency=45;invalidate(180);}
     if(motionReduced())sendState.snap(sendState.target);
     iconButton(451,0,busy?L"Interromper resposta":L"Enviar mensagem",668,372,38,38,true);
@@ -160,7 +160,7 @@ void drawAssistantInput(){
     canvas->PushAxisAlignedClip(D2D1::RectF(217,378,641,405),D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     if(selectAll&&assistantFocused&&!assistantInput.empty())
         box(218-assistantTextScroll,379,metrics.widthIncludingTrailingWhitespace,23,0x586B98,2,.7f);
-    if(assistantInput.empty())text(L"Mensagem…",218,381,422,14,0xB7B7C1);
+    if(assistantInput.empty())text(personal.view==PersonalView::Editor?L"Digite aqui…":L"Mensagem…",218,381,422,14,0xB7B7C1);
     else if(layout){use(0xEEEEF4);canvas->DrawTextLayout(D2D1::Point2F(218-assistantTextScroll,381),layout,brush);}
     lastAssistantCaretX=218+caretX-assistantTextScroll;
     if(assistantFocused&&assistantCaretVisible&&!selectAll)
@@ -168,9 +168,14 @@ void drawAssistantInput(){
     canvas->PopAxisAlignedClip();release(layout);
     hit(450,204,369,450,44,L"Mensagem para o assistente");
 }
+void settingsChoice(int,const std::wstring&,const std::wstring&,float);
+void drawToggle(int,bool,float,float,float,float,bool);
+#include "personal-ui.h"
 void drawHome(){
+    if(personal.view!=PersonalView::None){drawPersonalOverlay();return;}
     text(L"Assistant",204,87,380,21,0xF5F5F8,true);
-    if(!assistantBridge.busy)iconButton(452,0xE710,L"Nova conversa",634,87,30,30);
+    iconButton(3070,0xE81C,L"Conversas salvas",592,87,30,30);
+    if(!personalBusy())iconButton(452,0xE710,L"Nova conversa",634,87,30,30);
     iconButton(461,0xE713,L"Configurar assistente",676,87,30,30);
     if(conversation.empty()){
         symbol(0xE8F2,442,181,32,0xC9C9D2);
@@ -180,6 +185,7 @@ void drawHome(){
         std::vector<IDWriteTextLayout*> layouts;std::vector<float> heights;
         float total=0;
         for(auto& message:conversation){
+            if(message.modelOnly){layouts.push_back(nullptr);heights.push_back(0);continue;}
             IDWriteTextLayout* layout=nullptr;DWRITE_TEXT_METRICS metrics{};
             textFactory->CreateTextLayout(message.text.c_str(),static_cast<UINT32>(message.text.size()),font(14,false),476,100000,&layout);
             if(layout){layout->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);layout->GetMetrics(&metrics);}
@@ -189,7 +195,8 @@ void drawHome(){
         float y=133-std::max(0.0f,total-216)+assistantScroll;
         canvas->PushAxisAlignedClip(D2D1::RectF(204,129,712,351),D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
         for(size_t i=0;i<conversation.size();i++){
-            text(conversation[i].user?L"Você":L"Assistant",212,y,476,11,0xB7B7C1,true);
+            if(conversation[i].modelOnly)continue;
+            text(conversation[i].user?L"Você":conversation[i].tool?L"Hext":L"Assistant",212,y,476,11,0xB7B7C1,true);
             if(layouts[i]){use(0xEEEEF4);canvas->DrawTextLayout(D2D1::Point2F(212,y+21),layouts[i],brush);}
             y+=heights[i];release(layouts[i]);
         }
@@ -405,19 +412,7 @@ void drawSettingsSection(int section){
         text(L"Atualiza a conexão com o dispositivo padrão do Windows.",220,369,476,12,0xB7B7C1);
         text(L"As preferências são salvas automaticamente.",220,425,476,12,0xB7B7C1);
     }else if(section==3){
-        text(L"Assistant",204,130,508,14,0xC2C2CB,true);
-        box(204,160,508,66,0xFFFFFF,13,.045f);
-        text(L"Assistente",220,176,250,14,0xF0F0F5,true);
-        settingsChoice(465,L"Assistente",assistantName(),178);
-        box(204,242,508,138,0xFFFFFF,13,.045f);
-        text(L"Conexão",220,259,476,14,0xF0F0F5,true);
-        text(assistantConnectionMessage(),220,286,476,12,0xB7B7C1);
-        auto state=connectionState[assistantProvider];
-        button(467,state==hext::ConnectionState::Checking?L"Verificando…":state==hext::ConnectionState::Connected?
-            L"Reconectar":state==hext::ConnectionState::NeedsLogin?L"Entrar":L"Conectar",220,326,160,32,true);
-        if(assistantProvider==3||state==hext::ConnectionState::Missing||state==hext::ConnectionState::Incompatible||state==hext::ConnectionState::Error)
-            button(466,L"Localizar executável",396,326,300,32);
-        if(assistantProvider==3)text(L"Compatível com entrada e saída de texto.",220,425,476,12,0xB7B7C1);
+        drawPersonalSettings();
     }else{
         text(L"Monitoramento",204,130,508,14,0xC2C2CB,true);
         box(204,160,246,172,0xFFFFFF,13,.045f);
@@ -437,9 +432,10 @@ void drawSettingsSection(int section){
     }
 }
 void drawSettings(){
+    if(settingsSection==3&&personal.view!=PersonalView::None){drawPersonalOverlay();return;}
     text(L"Configurações",204,87,500,21,0xF5F5F8,true);
     float p=blend(.72f,1,unit(settingsFade.value));
-    canvas->PushLayer(D2D1::LayerParameters(D2D1::RectF(196,125,722,458),nullptr,
+    canvas->PushLayer(D2D1::LayerParameters(D2D1::RectF(196,125,722,468),nullptr,
         D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,D2D1::IdentityMatrix(),p),nullptr);
     drawSettingsSection(settingsSection);canvas->PopLayer();
 }
@@ -845,6 +841,7 @@ void render(){
     notifyAccessibility();
 }
 void stepMotion(double seconds){
+    personal.transition.step(seconds);
     for(auto* s:{&width,&height,&reveal,&pageFade,&appearance,&navPosition,&settingsFade,&colorPickerMotion,&sendState,&popoverMotion,&tooltipMotion,
                  &timerX,&timerY,&timerSize,&timerSymbol,&timerButtonX,&timerButtonY,&timerButtonW,&timerButtonH,
                  &volumeVisual,&cpuVisual,&ramVisual,&soundTabVisual,&soundPageFade})s->step(seconds);
@@ -854,6 +851,7 @@ void stepMotion(double seconds){
     for(auto& item:numberMotion)item.second.progress.step(seconds);
 }
 bool motionBusy(){
+    if(personal.transition.moving())return true;
     for(auto* s:{&width,&height,&reveal,&pageFade,&appearance,&navPosition,&settingsFade,&colorPickerMotion,&sendState,&popoverMotion,&tooltipMotion,
                  &timerX,&timerY,&timerSize,&timerSymbol,&timerButtonX,&timerButtonY,&timerButtonW,&timerButtonH,
                  &volumeVisual,&cpuVisual,&ramVisual,&soundTabVisual,&soundPageFade})if(s->moving())return true;
@@ -864,6 +862,7 @@ bool motionBusy(){
     return false;
 }
 void snapMotion(){
+    personal.transition.snap(personal.transition.target);
     for(auto* s:{&width,&height,&reveal,&pageFade,&appearance,&navPosition,&settingsFade,&colorPickerMotion,&sendState,&popoverMotion,&tooltipMotion,
                  &timerX,&timerY,&timerSize,&timerSymbol,&timerButtonX,&timerButtonY,&timerButtonW,&timerButtonH,
                  &volumeVisual,&cpuVisual,&ramVisual,&soundTabVisual,&soundPageFade})s->snap(s->target);

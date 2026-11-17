@@ -124,6 +124,10 @@ public:
             return FAILED(h)?h:v->SetMute(!muted,nullptr);});
         read(flow);return hr;
     }
+    HRESULT setMute(int flow,bool muted){
+        HRESULT hr=endpoint(selected[flow],[&](IAudioEndpointVolume* v){return v->SetMute(muted?TRUE:FALSE,nullptr);});
+        read(flow);return hr;
+    }
     HRESULT balance(float value){
         value=std::clamp(value,-1.f,1.f);
         HRESULT hr=endpoint(selected[0],[&](IAudioEndpointVolume* v){UINT count=0;v->GetChannelCount(&count);if(count!=2)return E_NOTIMPL;

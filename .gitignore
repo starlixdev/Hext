@@ -1,4 +1,10 @@
 /app/dist/
+/dist/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+/app/deps/
 /app/previous-builds/
 /app/*.exe
 /app/*.zip

@@ -8,7 +8,7 @@ int wmain(int argc,wchar_t** argv){
     if(child){
         if(argc>1&&std::wstring(argv[1])==L"--version"){std::cout<<"codex-cli 0.1; Claude Code 2.1";return 0;}
         if(argc>1&&(std::wstring(argv[1])==L"--help"||(std::wstring(argv[1])==L"exec"&&argc>2&&std::wstring(argv[2])==L"--help"))){
-            std::cout<<"--output-last-message --sandbox --ephemeral --output-format --permission-mode --no-session-persistence";return 0;
+            std::cout<<"--output-last-message --sandbox --ephemeral --output-format --permission-mode --no-session-persistence --output-schema --ignore-user-config --tools --json-schema --strict-mcp-config --setting-sources --safe-mode --restricted --settings";return 0;
         }
         if(argc>2&&std::wstring(argv[1])==L"login"&&std::wstring(argv[2])==L"status"){
             std::cerr<<"Logged in using ChatGPT";return 0;

@@ -72,7 +72,7 @@ struct HextAccessible final:IAccessible {
         out->lVal=item->id==200||item->id==331||item->id==332||soundSlider(item->id)?ROLE_SYSTEM_SLIDER:
             item->id>=520&&item->id<520+hext::MetricCount?ROLE_SYSTEM_STATICTEXT:
             item->id==240||item->id==450?ROLE_SYSTEM_TEXT:
-            item->id==311||item->id==1020||item->id==1021||(item->id>=380&&item->id<380+hext::MetricCount)?ROLE_SYSTEM_CHECKBUTTON:
+            item->id==3060||item->id==311||item->id==1020||item->id==1021||(item->id>=380&&item->id<380+hext::MetricCount)?ROLE_SYSTEM_CHECKBUTTON:
             item->id>=600&&item->id<=605?ROLE_SYSTEM_PAGETAB:
             (item->id>=100&&item->id<107)||(item->id>=1000&&item->id<=1002)?ROLE_SYSTEM_PAGETAB:
             (item->id>=901&&item->id<=905)||(item->id>=701&&item->id<=724)||(item->id>=741&&item->id<=743)||(item->id>=801&&item->id<=804)?
@@ -93,6 +93,7 @@ struct HextAccessible final:IAccessible {
             if(item->id==100+page)out->lVal|=STATE_SYSTEM_SELECTED;
             if(page==5&&item->id==600+settingsSection)out->lVal|=STATE_SYSTEM_SELECTED;
             if(item->id==311&&motionReduced())out->lVal|=STATE_SYSTEM_CHECKED;
+            if(item->id==3060&&personal.preferences.memory)out->lVal|=STATE_SYSTEM_CHECKED;
             if(item->id==1000+soundTab&&page==6)out->lVal|=STATE_SYSTEM_SELECTED;
             if((item->id==1020&&sound.reading[0].muted)||(item->id==1021&&sound.reading[1].muted))out->lVal|=STATE_SYSTEM_CHECKED;
             if(item->id>=380&&item->id<380+hext::MetricCount&&metricShown(item->id-380))out->lVal|=STATE_SYSTEM_CHECKED;

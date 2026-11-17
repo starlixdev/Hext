@@ -3,6 +3,7 @@
 #endif
 #define _UNICODE
 #define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #define _WIN32_WINNT 0x0A00
 #define WINVER 0x0A00
 #include <windows.h>
@@ -10,6 +11,7 @@
 #include <mmsystem.h>
 #include <commdlg.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <d2d1.h>
 #include <dwrite.h>
 #include <mmdeviceapi.h>
@@ -31,6 +33,9 @@
 #include "material.h"
 #include "color.h"
 #include "assistant.h"
+#include "personal-core.h"
+#include "personal-net.h"
+#include "personal-media.h"
 #include "hardware.h"
 #include "navigation.h"
 #include "sound.h"
@@ -78,8 +83,9 @@ bool assistantCaretVisible=false;
 size_t assistantCaret=0;
 float assistantTextScroll=0,lastAssistantCaretX=218;
 float assistantScroll=0,assistantScrollMax=0;
-struct ChatMessage{bool user;std::wstring text;};
+struct ChatMessage{bool user;std::wstring text;bool tool=false,modelOnly=false;};
 std::vector<ChatMessage> conversation;
+#include "personal-state.h"
 int settingsSection=5,settingsReturnPage=0;
 hext::Shortcuts shortcuts;
 int captureShortcut=-1;
@@ -263,6 +269,9 @@ void hit(int id,float x,float y,float w,float h,const std::wstring& name=L""){
 }
 UINT accentForeground(){return hext::foreground(accent());}
 bool controlEnabled(int id){
+    if(id==3063)return personal.ready&&personal.preferences.memory;
+    if(id==3080||id==3081||id==3083||id==3084||(id>=3085&&id<=3088)||(id>=3140&&id<3145)||(id>=3150&&id<3154))return personal.ready&&!personal.spotify.busy()&&!testMode;
+    if(id==3095)return personal.approval&&GetTickCount64()<=personal.approval->expires;
     if(id==1020||id==1021)return sound.reading[id-1020].ready;
     if(id==1022||id==1023){auto item=sound.chosen(id-1022);return item&&item->state==DEVICE_STATE_ACTIVE&&!item->isDefault;}
     if(id==1030||id==1031)return sound.reading[id-1030].ready;
@@ -325,7 +334,7 @@ void resetAssistantCaret(){
     assistantCaretVisible=assistantFocused;
     if(testMode)return;
     KillTimer(windowHandle,4);
-    if(assistantFocused&&expanded&&page==0){
+    if(assistantFocused&&expanded&&(page==0||personal.view==PersonalView::Editor)){
         UINT blink=GetCaretBlinkTime();
         if(blink!=INFINITE)SetTimer(windowHandle,4,blink?blink:530,nullptr);
     }
@@ -711,6 +720,7 @@ bool assistantConfigured(){
     return assistantProvider>0&&connectionState[assistantProvider]==hext::ConnectionState::Connected;
 }
 void resetAssistantConnection(){
+    personalRevoke();
     if(probingProvider>0&&connectionState[probingProvider]==hext::ConnectionState::Checking)
         connectionState[probingProvider]=hext::ConnectionState::Disconnected;
     connectionProbe.cancel();probingProvider=0;
@@ -771,10 +781,14 @@ void pollAssistantConnection(){
             connectionChecks[provider]|=2;startConnectionProbe(hext::AssistantTask::Authentication);
         }
         else connectionState[provider]=hext::ConnectionState::Incompatible;
+    }else if(connectionStage==hext::AssistantTask::Protection){
+        connectionState[provider]=!code&&output.find("HEXT_PROTECTED_OK")!=std::string::npos?hext::ConnectionState::Connected:hext::ConnectionState::Incompatible;
+        if(connectionState[provider]==hext::ConnectionState::Connected)connectionChecks[provider]|=8;
     }else{
         connectionState[provider]=hext::providerAuthenticated(provider,code,output)?
             hext::ConnectionState::Connected:code==WAIT_TIMEOUT?hext::ConnectionState::Error:hext::ConnectionState::NeedsLogin;
         if(connectionState[provider]==hext::ConnectionState::Connected)connectionChecks[provider]|=4;
+        if(provider==1&&connectionState[provider]==hext::ConnectionState::Connected){connectionState[provider]=hext::ConnectionState::Checking;startConnectionProbe(hext::AssistantTask::Protection);}
     }
     if(connectionState[provider]!=hext::ConnectionState::Checking){
         probingProvider=0;connectionProbe.result.clear();connectionProbe.diagnostic.clear();
@@ -791,25 +805,14 @@ const wchar_t* assistantConnectionMessage(){
         case S::Connected:return L"Conectado. Pronto para conversar.";
         case S::Missing:return L"Assistente não encontrado neste computador.";
         case S::NeedsLogin:return L"Entre na sua conta para concluir a conexão.";
-        case S::Incompatible:return L"Esta versão precisa ser atualizada.";
+        case S::Incompatible:return assistantProvider==1&&(connectionChecks[1]&4)?L"Configure a proteção do Codex para Windows e reconecte.":L"Esta versão precisa ser atualizada.";
         case S::Error:return L"Não foi possível verificar. Tente novamente.";
         default:return L"Verifique e conecte o assistente.";
     }
 }
 void sendAssistant(){
-    if(assistantBridge.busy){assistantBridge.cancel();assistantStatus=L"Interrompido.";invalidate();return;}
-    if(assistantInput.empty())return;
-    if(!assistantConfigured()){assistantStatus=L"Conecte o assistente nas configurações.";invalidate();return;}
-    conversation.push_back({true,assistantInput});assistantInput.clear();assistantCaret=0;assistantTextScroll=0;resetAssistantCaret();assistantScroll=0;
-    if(conversation.size()>12)conversation.erase(conversation.begin(),conversation.begin()+2);
-    std::wstring prompt=L"Responda em português como assistente pessoal. Responda somente à conversa abaixo, sem executar ações no computador.\n";
-    for(auto& message:conversation)prompt+=(message.user?L"\nUsuário: ":L"\nAssistant: ")+message.text+L"\n";
-    if(prompt.size()>24000)prompt=L"Responda em português à conversa (histórico parcial):\n"+prompt.substr(prompt.size()-24000);
-    auto work=std::filesystem::path(configPath).parent_path()/L"assistant-workspace";
-    if(!assistantBridge.start(assistantPath[assistantProvider],assistantProvider,prompt,work))
-        assistantStatus=L"Não foi possível iniciar o assistente. Verifique a conexão.";
-    else assistantStatus=L"Pensando…";
-    invalidate();
+    if(personal.view==PersonalView::Editor)personalCommitEditor();
+    else personalSend();
 }
 void chooseAssistantExecutable(){
     if(assistantProvider==0)return;
@@ -823,10 +826,12 @@ void chooseAssistantExecutable(){
 }
 #include "shortcut-actions.h"
 #include "sound-actions.h"
+#include "personal-runtime.h"
 #include "interface.h"
 
 void changePage(int value){
     if(value==page)return;
+    personalChangePage();
     cancelShortcutCapture();
     if(value==5)settingsReturnPage=page;
     previousPage=page;
@@ -891,7 +896,8 @@ void executeCommand(){
 void action(int id){
     if(!controlEnabled(id))return;
     keyboardId=-1;
-    if(id>=100&&id<107)changePage(id-100);
+    if(id>=3000&&id<3200)personalAction(id);
+    else if(id>=100&&id<107)changePage(id-100);
     else if(id>=1000)soundAction(id);
     else if(id>=600&&id<=605){
         cancelShortcutCapture();
@@ -924,7 +930,7 @@ void action(int id){
     else if(id==754){closePopover();invalidate();}
     else if(id==450){assistantFocused=true;assistantCaret=assistantInput.size();resetAssistantCaret();inputFocused=false;keyboardId=450;selectAll=false;invalidate();}
     else if(id==451)sendAssistant();
-    else if(id==452){if(!assistantBridge.busy){conversation.clear();assistantStatus.clear();assistantScroll=0;}invalidate();}
+    else if(id==452){if(!personalBusy()){personal.pendingChat.clear();if(conversation.empty())personalNew(true);else personalShow(PersonalView::NewChat);}invalidate();}
     else if(id==460||id==461){changePage(5);settingsSection=3;settingsFade.snap(1);invalidate();}
     else if(id==465){openSettingsMenu(465);invalidate();}
     else if(id==466)chooseAssistantExecutable();
@@ -1157,6 +1163,7 @@ LRESULT CALLBACK procedure(HWND wnd,UINT message,WPARAM wp,LPARAM lp){
         if(page==0){assistantScroll=std::clamp(assistantScroll+GET_WHEEL_DELTA_WPARAM(wp)/120.0f*60,0.0f,assistantScrollMax);invalidate();}
         return 0;
     case WM_KEYDOWN:
+        if(wp==VK_ESCAPE&&personal.view!=PersonalView::None){personalCloseView();return 0;}
         if(captureShortcut>=0){if(wp==VK_ESCAPE){cancelShortcutCapture();invalidate();}return 0;}
         if(page==6&&soundChooser>=0&&wp==VK_ESCAPE){soundChooser=-1;invalidate();return 0;}
         if(soundSlider(keyboardId)&&(wp==VK_LEFT||wp==VK_RIGHT||wp==VK_UP||wp==VK_DOWN||wp==VK_HOME||wp==VK_END)){
@@ -1378,16 +1385,12 @@ LRESULT CALLBACK procedure(HWND wnd,UINT message,WPARAM wp,LPARAM lp){
             }
             pollAssistantConnection();
             if(bluetooth.poll(bluetoothSnapshot)){bluetoothSelected=-1;bluetoothOffset=0;if(page==6)invalidate();}
-            if(assistantBridge.poll()){
-                if(assistantBridge.exitCode==0&&!assistantBridge.result.empty()){
-                    conversation.push_back({false,hext::wide(assistantBridge.result).substr(0,12000)});
-                    assistantStatus.clear();assistantScroll=0;
-                }else assistantStatus=assistantBridge.exitCode==WAIT_TIMEOUT?L"O assistente demorou demais. Tente novamente.":
-                    L"Não foi possível responder. Verifique a conexão do assistente.";
-                invalidate();
-            }
+            try{
+                if(assistantBridge.poll()){personalReply();invalidate();}
+                personalPoll();
+            }catch(...){personalRevoke();assistantStatus=L"Não foi possível processar os dados. Solicitação interrompida.";invalidate();}
         }else if(wp==4){
-            if(!assistantFocused||!expanded||page!=0||(!testMode&&!windowShown)){
+            if(!assistantFocused||!expanded||(page!=0&&personal.view!=PersonalView::Editor)||(!testMode&&!windowShown)){
                 KillTimer(wnd,4);assistantCaretVisible=false;
             }else{assistantCaretVisible=!assistantCaretVisible;render();}
         }else if(wp==5){
@@ -1397,6 +1400,7 @@ LRESULT CALLBACK procedure(HWND wnd,UINT message,WPARAM wp,LPARAM lp){
     }
     case WM_CLOSE:DestroyWindow(wnd);return 0;
     case WM_DESTROY:
+        personalRevoke();personal.spotify.cancel();if(personal.saved)personalSaveChat();
         cancelShortcutCapture();shortcuts.releaseAll();
         hardwareMonitor.stop();
         assistantBridge.cancel();
@@ -1975,11 +1979,13 @@ int recordMotion(const std::filesystem::path& directory){
           <<"Wallpaper material loaded: "<<wallpaper.ready<<"\n";
     return valid?0:1;
 }
+#include "personal-verification.h"
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
+    bool personalCheck=std::wstring(arguments).find(L"--verify-personal")!=std::wstring::npos;
     bool recording=std::wstring(arguments).find(L"--record-motion")!=std::wstring::npos;
     bool connectionCheck=std::wstring(arguments).find(L"--verify-connection")!=std::wstring::npos;
     bool hardwareCheck=std::wstring(arguments).find(L"--verify-hardware")!=std::wstring::npos;
-    testMode=recording||connectionCheck||hardwareCheck||std::wstring(arguments).find(L"--verify-render")!=std::wstring::npos;
+    testMode=personalCheck||recording||connectionCheck||hardwareCheck||std::wstring(arguments).find(L"--verify-render")!=std::wstring::npos;
     HANDLE single=testMode?nullptr:CreateMutex(nullptr,FALSE,L"Local\\HextIsland");
     if(!testMode&&GetLastError()==ERROR_ALREADY_EXISTS){
         MessageBox(nullptr,L"O Hext já está aberto. Passe o mouse no centro superior da área de trabalho.",L"Hext",MB_OK);
@@ -1989,6 +1995,9 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
     wchar_t path[32768];GetModuleFileName(nullptr,path,32768);configPath=path;
     configPath=configPath.substr(0,configPath.find_last_of(L"\\/")+1)+L"hext.ini";
+    wchar_t privateRoot[32768]{};GetEnvironmentVariableW(L"LOCALAPPDATA",privateRoot,32768);
+    auto personalRoot=testMode?std::filesystem::path(configPath).parent_path()/(L"personal-fixture-"+std::to_wstring(GetCurrentProcessId())):std::filesystem::path(privateRoot)/L"Hext/assistant-data";
+    personalInitialize(personalRoot);
     auto setting=[](const wchar_t* key,int fallback){return static_cast<int>(GetPrivateProfileInt(L"Ilha",key,fallback,configPath.c_str()));};
     auto recent=accentPalette.recent;
     int legacyAccent=std::clamp(setting(L"accent",1),0,3);
@@ -2042,7 +2051,8 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     }
     accessibleUI=new HextAccessible;
     if(testMode){
-        int result=hardwareCheck?verifyHardware(std::filesystem::path(configPath).parent_path()):
+        int result=personalCheck?verifyPersonal(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos,std::wstring(arguments).find(L"native")!=std::wstring::npos):
+            hardwareCheck?verifyHardware(std::filesystem::path(configPath).parent_path()):
             connectionCheck?verifyAssistantConnection(std::filesystem::path(configPath).parent_path()):
             recording?recordMotion(std::filesystem::path(configPath).parent_path()):
             verifyRenderer(std::filesystem::path(configPath).parent_path());
@@ -2050,6 +2060,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
         volumeCallback->Release();disposeGraphics();CoUninitialize();return result;
     }
     taskbarCreated=RegisterWindowMessage(L"TaskbarCreated");
+    if(personal.ready){try{auto last=personal.store.get("settings","last-chat");if(last.is_object()){auto id=last.value("chat","");if(personal.store.get("chat",id).is_object())personalOpenChat(id);}}catch(...){personal.notice=L"Não foi possível restaurar a última conversa. Abra uma conversa salva.";}}
     DragAcceptFiles(windowHandle,TRUE);tray(true);
     ShowWindow(windowHandle,SW_HIDE);
     foregroundHook=SetWinEventHook(EVENT_SYSTEM_FOREGROUND,EVENT_SYSTEM_FOREGROUND,nullptr,onForeground,0,0,WINEVENT_OUTOFCONTEXT);

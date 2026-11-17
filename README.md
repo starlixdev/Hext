@@ -22,7 +22,9 @@ Change both global shortcuts in **Personalizar → Geral**. Hext checks whether 
 
 ## What is implemented
 
-- Assistant adapters for Codex CLI, Claude Code, and a configurable text CLI. Connection checks verify installation, required options, and authentication. Hext does not include a model or a paid assistant subscription.
+- Structured assistant actions with per-category permissions, one-time approvals, and protected Codex/Claude adapters. A compatible installed CLI and its own authentication are required; arbitrary text CLIs cannot run the protected protocol.
+- Encrypted saved conversations, separate bounded preference memory, and configurable response language.
+- Optional Spotify PKCE connection, text search, device selection, and playback controls, subject to Spotify account and application access.
 - Output and input device selection, volume, mute, stereo balance, explicit default-device switching, and Bluetooth management through Windows.
 - Timers, local commands, CPU and GPU readings, RAM usage, and temporary file shortcuts.
 - A reorderable sidebar, recent accent colors, a color wheel, material and scale settings, and reduced motion.
@@ -37,6 +39,7 @@ Install MinGW-w64 with `g++` and `windres`, then run in PowerShell:
 ./app/build.ps1 -Preview
 ./scripts/test.ps1
 ./app/dist/Hext-preview.exe --verify-render
+./app/dist/Hext-preview.exe --verify-personal
 ```
 
 The hidden renderer exports images and checks interaction states without recording the desktop. Build prerequisites, test boundaries, and release steps are in [Development](docs/development.md).
@@ -56,4 +59,4 @@ Read [Assistant setup](docs/assistant.md), [Hardware readings](docs/hardware.md)
 
 ## License and credits
 
-Hext is distributed under [GPL-3.0-or-later](LICENSE). See [Third-party notices](THIRD_PARTY_NOTICES.md) for historical redistribution credits. Apple motion guidance and Kobi informed the interaction design. Hext uses Windows fonts and icons, and is not affiliated with Apple or Kobi.
+Hext is distributed under [GPL-3.0-or-later](LICENSE). See [Third-party notices](THIRD_PARTY_NOTICES.md) for SQLite, JSON, and historical redistribution credits. Apple motion guidance and Kobi informed the interaction design. Hext uses Windows fonts and icons, and is not affiliated with Apple, Kobi, OpenAI, Anthropic, or Spotify.

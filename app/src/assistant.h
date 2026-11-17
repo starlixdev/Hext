@@ -1,4 +1,7 @@
 #pragma once
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <string>
 #include <vector>
@@ -9,7 +12,7 @@
 #include <atomic>
 #include <cctype>
 namespace hext {
-enum class AssistantTask {Chat,Version,Capabilities,Authentication};
+enum class AssistantTask {Chat,Version,Capabilities,Authentication,Protection};
 enum class ConnectionState {Disconnected,Checking,Connected,Missing,NeedsLogin,Incompatible,Error};
 inline std::atomic<unsigned long long> assistantSequence{0};
 inline std::string lower(std::string value){
@@ -23,9 +26,11 @@ inline bool providerVersion(int provider,const std::string& output){
 }
 inline bool providerCapabilities(int provider,const std::string& output){
     if(provider==1)return output.find("--output-last-message")!=std::string::npos&&
-        output.find("--sandbox")!=std::string::npos&&output.find("--ephemeral")!=std::string::npos;
+        output.find("--sandbox")!=std::string::npos&&output.find("--ephemeral")!=std::string::npos&&
+        output.find("--output-schema")!=std::string::npos&&output.find("--ignore-user-config")!=std::string::npos;
     return output.find("--output-format")!=std::string::npos&&
-        output.find("--permission-mode")!=std::string::npos&&output.find("--no-session-persistence")!=std::string::npos;
+        output.find("--permission-mode")!=std::string::npos&&output.find("--no-session-persistence")!=std::string::npos&&
+        output.find("--tools")!=std::string::npos&&output.find("--json-schema")!=std::string::npos&&output.find("--strict-mcp-config")!=std::string::npos&&output.find("--setting-sources")!=std::string::npos&&output.find("--safe-mode")!=std::string::npos&&output.find("--restricted")!=std::string::npos&&output.find("--settings")!=std::string::npos;
 }
 inline bool providerAuthenticated(int provider,DWORD code,const std::string& output){
     if(code)return false;
@@ -65,14 +70,15 @@ inline std::wstring wide(const std::string& text){
 struct AssistantBridge {
     HANDLE process=nullptr,job=nullptr,output=nullptr,error=nullptr;
     bool busy=false;DWORD exitCode=0;ULONGLONG started=0,timeoutMs=120000;
-    std::string result,diagnostic;
-    std::filesystem::path answerFile;
+    std::string result,diagnostic,events;
+    std::filesystem::path answerFile,schemaFile;
     ~AssistantBridge(){cancel();}
     static void close(HANDLE& h){if(h&&h!=INVALID_HANDLE_VALUE)CloseHandle(h);h=nullptr;}
     void cancel(){
         if(job)TerminateJobObject(job,1);
         close(process);close(job);close(output);close(error);busy=false;
         if(!answerFile.empty()){DeleteFileW(answerFile.c_str());answerFile.clear();}
+        if(!schemaFile.empty()){DeleteFileW(schemaFile.c_str());schemaFile.clear();}
     }
     static void drain(HANDLE pipe,std::string& target){
         char bytes[4096];DWORD available=0,read=0;
@@ -83,8 +89,8 @@ struct AssistantBridge {
         }
     }
     bool start(const std::wstring& executable,int provider,const std::wstring& prompt,
-               const std::filesystem::path& work,AssistantTask task=AssistantTask::Chat){
-        cancel();result.clear();diagnostic.clear();exitCode=0;
+               const std::filesystem::path& work,AssistantTask task=AssistantTask::Chat,const std::string& schema=""){
+        cancel();result.clear();diagnostic.clear();events.clear();exitCode=0;
         std::error_code ec;std::filesystem::create_directories(work,ec);
         if(ec||!std::filesystem::is_regular_file(executable,ec))return false;
         SECURITY_ATTRIBUTES security{sizeof(security),nullptr,TRUE};
@@ -110,22 +116,54 @@ struct AssistantBridge {
             std::vector<std::wstring>{L"exec",L"--help"}:std::vector<std::wstring>{L"--help"};
         else if(task==AssistantTask::Authentication)args=provider==1?
             std::vector<std::wstring>{L"login",L"status"}:std::vector<std::wstring>{L"auth",L"status"};
+        else if(task==AssistantTask::Protection)args={L"-c",L"features.prefer_mxc=true",L"-c",L"windows.sandbox=\"elevated\"",
+            L"-c",L"default_permissions=\"hext\"",L"-c",L"permissions.hext.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\":workspace_roots\"=\"read\"}",
+            L"-c",L"permissions.hext.network.enabled=false",L"sandbox",L"--include-managed-config",L"--permission-profile",L"hext",L"--",L"cmd.exe",L"/d",L"/c",L"echo",L"HEXT_PROTECTED_OK"};
         else if(provider==1){
             answerFile=work/(L".hext-answer-"+tag+L".txt");
             args={L"exec",L"--skip-git-repo-check",L"--sandbox",L"read-only",L"--ephemeral",
                   L"--color",L"never",L"--output-last-message",answerFile.wstring(),L"-"};
         }else if(provider==2)args={L"-p",L"--output-format",L"text",L"--permission-mode",L"plan",L"--no-session-persistence"};
+        if(task==AssistantTask::Chat&&!schema.empty()){
+            if(provider!=1&&provider!=2){CloseHandle(input);close(outputWrite);close(errorWrite);cancel();return false;}
+            if(provider==1){
+                auto sandbox=std::find(args.begin(),args.end(),L"--sandbox");if(sandbox!=args.end())args.erase(sandbox,sandbox+2);
+                schemaFile=work/(L".hext-schema-"+tag+L".json");std::ofstream file(schemaFile,std::ios::binary);file<<schema;file.close();
+                if(!file){CloseHandle(input);close(outputWrite);close(errorWrite);cancel();return false;}
+                args.insert(args.end()-1,{L"--ignore-user-config",L"--strict-config",L"--json",L"--output-schema",schemaFile.wstring(),L"--disable",L"shell_tool",
+                    L"--disable",L"unified_exec",L"--disable",L"apps",L"--disable",L"plugins",L"--disable",L"hooks",
+                    L"--disable",L"computer_use",L"--disable",L"browser_use",L"--disable",L"browser_use_external",
+                    L"--disable",L"browser_use_full_cdp_access",L"--disable",L"in_app_browser",L"--disable",L"shell_snapshot",
+                    L"--disable",L"multi_agent",L"--disable",L"multi_agent_v2",L"--disable",L"image_generation",
+                    L"-c",L"default_permissions=\"hext\"",
+                    L"-c",L"features.prefer_mxc=true",L"-c",L"windows.sandbox=\"elevated\"",
+                    L"-c",L"permissions.hext.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\":workspace_roots\"=\"read\",\":tmpdir\"=\"deny\",\":slash_tmp\"=\"deny\"}",
+                    L"-c",L"permissions.hext.network.enabled=false",
+                    L"-c",L"web_search=\"disabled\"",L"-c",L"mcp_servers={}",L"-c",L"features.skip_host_skill_discovery=true"});
+            }else{
+                args={L"-p",L"--output-format",L"json",L"--permission-mode",L"plan",L"--no-session-persistence",L"--tools",L"",
+                    L"--disallowedTools",L"mcp__*",L"--strict-mcp-config",L"--mcp-config",L"{\"mcpServers\":{}}",
+                    L"--setting-sources",L"",L"--safe-mode",L"--restricted",L"--settings",L"{\"disableAllHooks\":true,\"autoMemoryEnabled\":false}",L"--disable-slash-commands",L"--json-schema",wide(schema)};
+            }
+        }
         std::wstring command=quoteArgument(executable);
         for(const auto& arg:args)command+=L" "+quoteArgument(arg);
-        STARTUPINFOW startup{};startup.cb=sizeof(startup);startup.dwFlags=STARTF_USESTDHANDLES;
-        startup.hStdInput=input;startup.hStdOutput=outputWrite;startup.hStdError=errorWrite;
+        STARTUPINFOEXW startup{};startup.StartupInfo.cb=sizeof(startup);startup.StartupInfo.dwFlags=STARTF_USESTDHANDLES;
+        startup.StartupInfo.hStdInput=input;startup.StartupInfo.hStdOutput=outputWrite;startup.StartupInfo.hStdError=errorWrite;
+        SIZE_T attributeBytes=0;InitializeProcThreadAttributeList(nullptr,1,0,&attributeBytes);std::vector<unsigned char> attributes(attributeBytes);
+        startup.lpAttributeList=reinterpret_cast<PPROC_THREAD_ATTRIBUTE_LIST>(attributes.data());
+        HANDLE inherited[]={input,outputWrite,errorWrite};
+        bool attributeInitialized=InitializeProcThreadAttributeList(startup.lpAttributeList,1,0,&attributeBytes)!=FALSE;
+        bool attributeReady=attributeInitialized&&
+            UpdateProcThreadAttribute(startup.lpAttributeList,0,PROC_THREAD_ATTRIBUTE_HANDLE_LIST,inherited,sizeof(inherited),nullptr,nullptr);
         PROCESS_INFORMATION info{};
         job=CreateJobObjectW(nullptr,nullptr);
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION limit{};
         limit.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         bool ready=job&&SetInformationJobObject(job,JobObjectExtendedLimitInformation,&limit,sizeof(limit));
-        BOOL created=ready&&CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,TRUE,
-            CREATE_NO_WINDOW|CREATE_SUSPENDED,nullptr,work.c_str(),&startup,&info);
+        BOOL created=ready&&attributeReady&&CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,TRUE,
+            CREATE_NO_WINDOW|CREATE_SUSPENDED|EXTENDED_STARTUPINFO_PRESENT,nullptr,work.c_str(),&startup.StartupInfo,&info);
+        if(attributeInitialized)DeleteProcThreadAttributeList(startup.lpAttributeList);
         CloseHandle(input);close(outputWrite);close(errorWrite);
         if(!created){cancel();return false;}
         process=info.hProcess;
@@ -142,6 +180,7 @@ struct AssistantBridge {
         if(WaitForSingleObject(process,0)!=WAIT_OBJECT_0)return false;
         drain(output,result);drain(error,diagnostic);GetExitCodeProcess(process,&exitCode);
         if(!answerFile.empty()){
+            events=result;
             std::ifstream file(answerFile,std::ios::binary);
             if(file){
                 result.resize(1024*1024);file.read(result.data(),static_cast<std::streamsize>(result.size()));
@@ -150,6 +189,7 @@ struct AssistantBridge {
         }
         close(process);close(job);close(output);close(error);busy=false;
         if(!answerFile.empty()){DeleteFileW(answerFile.c_str());answerFile.clear();}
+        if(!schemaFile.empty()){DeleteFileW(schemaFile.c_str());schemaFile.clear();}
         return true;
     }
 };

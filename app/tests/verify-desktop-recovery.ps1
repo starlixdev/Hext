@@ -15,6 +15,7 @@ public static class HextRecoveryProbe {
   [DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")]public static extern IntPtr GetShellWindow();
   [DllImport("user32.dll")]public static extern int GetSystemMetrics(int index);
+  [DllImport("user32.dll")]public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
   [DllImport("user32.dll")]public static extern uint GetWindowThreadProcessId(IntPtr w,IntPtr pid);
   [DllImport("kernel32.dll")]public static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")]public static extern bool AttachThreadInput(uint a,uint b,bool attach);
@@ -32,6 +33,9 @@ public static class HextRecoveryProbe {
 $taskHext=[HextRecoveryProbe]::FindWindow('HextIslandWindow','Hext')
 if($taskHext -eq [IntPtr]::Zero){throw 'Hext is not running.'}
 $taskOriginalForeground=[HextRecoveryProbe]::GetForegroundWindow()
+# Use physical coordinates, matching Hext's PerMonitorV2 window. A DPI-unaware
+# PowerShell host otherwise mixes virtual screen metrics and native frame bounds.
+$taskPreviousDpi=[HextRecoveryProbe]::SetThreadDpiAwarenessContext([IntPtr](-4))
 function Read-HextRecovery {
   [HextRecoveryProbe]::Pump()
   $taskFlags=[IntPtr]::Zero
@@ -82,4 +86,5 @@ if($taskProbe -eq [IntPtr]::Zero){throw 'Could not create the temporary verifica
   if($taskProbe -ne [IntPtr]::Zero){[void][HextRecoveryProbe]::DestroyWindow($taskProbe)}
   $taskShell.UndoMinimizeAll()
   if($taskOriginalForeground -ne $taskHext){[HextRecoveryProbe]::Focus($taskOriginalForeground)}
+  if($taskPreviousDpi -ne [IntPtr]::Zero){[void][HextRecoveryProbe]::SetThreadDpiAwarenessContext($taskPreviousDpi)}
 }
