@@ -34,6 +34,9 @@ function Invoke-HextShortcut([int]$slot) {
   [void][HextShortcutRuntime]::PostMessage($taskWindow,0x0312,[IntPtr]$slot,[IntPtr](($taskKey -shl 16) -bor 3))
 }
 try {
+  # The pointer can have expanded normal desktop presence before the test starts.
+  [void][HextShortcutRuntime]::PostMessage($taskWindow,0x8005,[IntPtr]10,[IntPtr]::Zero)
+  Start-Sleep -Milliseconds 750
   Invoke-HextShortcut 2
   Start-Sleep -Milliseconds 750
   $taskState = Read-HextWindow

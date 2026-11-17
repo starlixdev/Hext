@@ -14,7 +14,7 @@ Use a Windows x64 MinGW-w64 environment with `g++`, `windres`, and PowerShell. C
 
 The console suite checks springs, desktop-region overlap, visibility, presentation, colors, wallpaper blur, hardware parsing, assistant subprocesses, audio configuration, shortcuts, and SHA-256. Shortcut registration tests use two hidden windows and temporary uncommon combinations; no keypress is injected. A restricted desktop sandbox may deny registration even when normal Windows execution permits it.
 
-`--verify-render` exports native frames and exercises controls in a hidden window. Hardware and audio devices are read, but volume, default endpoints, Bluetooth pairing, and live effects are not changed. Effect-enabled, unavailable-device, capture, and conflict images are explicit renderer fixtures. The optional `tests/visual-check.py` checks pixel alignment and requires Pillow and NumPy for development only.
+`--verify-render` exports native frames and exercises controls in a hidden window. Animation fixtures explicitly enable motion, regardless of a build runner's Windows preferences; reduced motion is also tested separately. Hardware and audio devices are read, but volume, default endpoints, Bluetooth pairing, and live effects are not changed. Effect-enabled, unavailable-device, capture, and conflict images are explicit renderer fixtures. The optional `tests/visual-check.py` checks pixel alignment and requires Pillow and NumPy for development only.
 
 `--verify-hardware` reads local sensors. `--verify-connection` checks the selected CLI without inference. `--record-motion` exports a 600-frame renderer sequence without recording the desktop. The runtime shortcut script operates only on Hext's own window after deployment; it briefly opens and closes the real panel.
 

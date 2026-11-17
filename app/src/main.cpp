@@ -1437,6 +1437,9 @@ bool exportFrame(const std::filesystem::path& path) {
     return output.good();
 }
 int verifyRenderer(const std::filesystem::path& directory) {
+    // Animation fixtures must be independent of the runner's accessibility defaults.
+    // Reduced motion is exercised explicitly below; normal runtime keeps Windows preferences.
+    reducedMotion=systemReducedMotion=false;
     std::ofstream report(directory/"verification.txt");
     int failures=0;
     auto check=[&](bool condition,const char* label){
