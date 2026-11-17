@@ -1,0 +1,9 @@
+name: Feature request
+description: Suggest a specific behavior
+body:
+  - type: textarea
+    attributes:
+      label: What would you like to do?
+      description: Describe the problem and the resulting behavior you need.
+    validations:
+      required: true

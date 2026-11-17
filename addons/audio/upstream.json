@@ -1,0 +1,18 @@
+{
+  "name": "Hext Audio",
+  "upstream": "115dkk/EqualizerAPO-XT",
+  "version": "2.64.0",
+  "commit": "e00710497d7a15220f0f94cd944866c2e208eeb4",
+  "release_tag": "audio-addon-2.64.0",
+  "installer": {
+    "url": "https://github.com/115dkk/EqualizerAPO-XT/releases/download/v2.64.0/EqualizerAPO-XT-x64-sse2-x64-sse2-Setup.exe",
+    "name": "Hext-Audio-Setup.exe",
+    "sha256": "09cc9cc55e9a721779d0a4f3acaacb7038bb20d1b150fac365300c9ac10a22b9",
+    "size": 74386700
+  },
+  "source": {
+    "url": "https://github.com/115dkk/EqualizerAPO-XT/releases/download/v2.64.0/EqualizerAPO-XT-source-2.64.0.zip",
+    "name": "EqualizerAPO-XT-source-2.64.0.zip",
+    "sha256": "3acf432efb729532c616717be7dc9b6de84796f7fcdf2abf2a27d0ce4e0a7c30"
+  }
+}
