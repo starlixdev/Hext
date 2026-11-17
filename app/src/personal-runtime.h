@@ -1,7 +1,7 @@
 #pragma once
 std::wstring personalMessage(const wchar_t* pt,const wchar_t* en){return personal.preferences.language=="en"?en:pt;}
 void personalShow(PersonalView view){
-    personal.view=view;personal.transition.snap(motionReduced()?1:0);personal.transition.target=1;personal.transition.frequency=55;personal.listPage=0;invalidate(160);
+    personal.view=view;personal.notice.clear();personal.transition.snap(motionReduced()?1:0);personal.transition.target=1;personal.transition.frequency=55;personal.listPage=0;invalidate(160);
 }
 void personalRevoke(){
     assistantBridge.cancel();personal.gate.revoke();personal.approval.reset();personal.queued.clear();personal.memoryDraft=nullptr;
@@ -37,7 +37,7 @@ void personalAppend(bool user,const std::wstring& value,bool tool=false){
     conversation.push_back({user,value.substr(0,12000),tool});personal.dirty=true;assistantScroll=0;if(personal.saved)personalSaveChat();invalidate(180);
 }
 void personalNew(bool discard){
-    if(!discard&&!conversation.empty()){personalSaveChat();if(!personal.saved)return;}
+    if(!discard&&!conversation.empty()){personalSaveChat();if(!personal.saved||personal.dirty)return;}
     auto old=personal.chat;personalRevoke();
     if(discard)personal.store.transaction([&]{personal.memory.eraseChat(old);if(personal.saved)personal.store.erase("chat",old);});
     conversation.clear();personal.chat=hext::randomID();personal.title="Nova conversa";personal.saved=personal.dirty=false;assistantInput.clear();assistantCaret=0;assistantStatus.clear();personal.view=PersonalView::None;
@@ -46,6 +46,7 @@ void personalNew(bool discard){
 void personalOpenChat(const std::string& id){
     auto record=personal.store.get("chat",id);if(!record.is_object()||!record.contains("messages")||!record["messages"].is_array())throw std::runtime_error("Invalid conversation");
     std::vector<ChatMessage> next;for(auto& m:record["messages"]){if(next.size()>=500||!hext::textField(m,"text",48000,true)||!hext::textField(m,"role",16))throw std::runtime_error("Invalid conversation");auto role=m["role"].get<std::string>();if(role!="user"&&role!="assistant"&&role!="tool")throw std::runtime_error("Invalid role");next.push_back({role=="user",hext::wide(m["text"]),role=="tool"});}
+    personal.store.put("settings","last-chat",{{"chat",id}});
     personalRevoke();conversation=std::move(next);personal.chat=id;personal.title=record.value("title","Conversa");personal.saved=true;personal.dirty=false;assistantInput.clear();assistantCaret=0;assistantStatus.clear();personal.view=PersonalView::None;assistantScroll=0;
 }
 void personalRefreshRows(PersonalView view){
@@ -58,6 +59,7 @@ void personalEditor(const std::string& kind,const std::wstring& title,const std:
     personalShow(PersonalView::Editor);assistantInput=value;assistantCaret=value.size();assistantTextScroll=0;assistantFocused=true;keyboardId=450;selectAll=!value.empty();resetAssistantCaret();invalidate(160);
 }
 void personalCloseView(){
+    if(personal.view==PersonalView::NewChat)personal.pendingChat.clear();
     if(personal.view==PersonalView::Editor){assistantInput=personal.draft;assistantCaret=assistantInput.size();assistantFocused=false;personal.view=personal.editorReturn;}
     else if(personal.view==PersonalView::Action){personalRevoke();personal.view=PersonalView::None;assistantStatus=L"Ação cancelada.";}
     else{personal.memoryDraft=nullptr;personal.view=PersonalView::None;}
@@ -281,7 +283,7 @@ void personalAction(int id){
         else if(id>=3085&&id<=3088){const char* ops[]={"previous","resume","pause","next"};personal.spotify.command(ops[id-3085]);}
         else if(id==3089)personal.spotifyPage=0;
         else if(id==3190){if(!testMode)ShellExecuteW(windowHandle,L"open",L"https://www.spotify.com/account/apps/",nullptr,nullptr,SW_SHOWNORMAL);}
-        else if(id==3090){personalCloseView();}
+        else if(id==3090||id==3191){personalCloseView();}
         else if(id==3091){personalSaveChat();personal.notice=personal.saved?L"Conversa salva.":personal.notice;}
         else if(id==3092)personalNew(false);
         else if(id==3093)personalNew(true);

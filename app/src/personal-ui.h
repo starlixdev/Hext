@@ -8,7 +8,7 @@ void personalParagraph(const std::wstring& value,float x,float y,float w,float h
 void drawPersonalOverlay(){
     auto view=personal.view;
     text(view==PersonalView::Chats?L"Conversas":view==PersonalView::Memory?L"Memória":view==PersonalView::Assets?L"Itens autorizados":view==PersonalView::Editor?personal.editorTitle:L"Assistant",204,87,454,21,0xF5F5F8,true);
-    iconButton(3090,0xE711,L"Voltar",676,87,30,30);
+    iconButton(3191,0xE711,L"Fechar painel",676,87,30,30);
     canvas->PushLayer(D2D1::LayerParameters(D2D1::RectF(196,125,722,470),nullptr,D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,D2D1::IdentityMatrix(),unit(personal.transition.value)),nullptr);
     if(view==PersonalView::Chats||view==PersonalView::Memory||view==PersonalView::Assets){
         if(personal.rows.empty())alignedText(view==PersonalView::Chats?L"Nenhuma conversa salva":view==PersonalView::Memory?L"Nenhuma preferência guardada":L"Nenhum item autorizado",204,230,508,32,18,0xD8D8E1);

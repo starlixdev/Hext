@@ -22,6 +22,10 @@ int verifyPersonal(const std::filesystem::path& directory,bool provider,bool nat
     personalOpenChat(second);auto prompt=personalPrompt();check(prompt.find(L"brief-private-marker")!=std::wstring::npos,"shared explicit memory is available in a different conversation");
     personal.preferences.memory=false;check(personalPrompt().find(L"brief-private-marker")==std::wstring::npos,"disabled memory is absent from provider context");personal.preferences.memory=true;
     personal.editorID="chat:"+second;personalAction(3097);check(personal.store.get("chat",second).is_null()&&personal.memory.list().size()==1,"deleting chat removes derived memory and preserves pinned preferences");
+    personalOpenChat(first);check(personal.store.get("settings","last-chat").value("chat","")==first,"reopening a saved chat persists the active chat for restart");
+    personal.pendingChat=first;personalShow(PersonalView::NewChat);personalCloseView();check(personal.pendingChat.empty(),"canceling a conversation switch clears its pending target");
+    auto beforeFailure=conversation;conversation.push_back({true,std::wstring(1100000,L'x')});personal.dirty=true;personalNew(false);
+    check(personal.chat==first&&personal.dirty&&conversation.size()==beforeFailure.size()+1,"a real storage payload-limit failure preserves the dirty chat instead of creating another");conversation=std::move(beforeFailure);personal.dirty=false;personal.notice.clear();
     personal.preferences.autonomy=hext::Autonomy::Allowed;personal.preferences.grants[0]=hext::Grant::Deny;personalSavePreferences();auto saved=personal.store.get("settings","assistant");check(saved["grants"][0]==0,"individual permission changes are persisted");
     personal.preferences=hext::AssistantPreferences{};personalSavePreferences();
     page=previousPage=5;settingsSection=3;settingsFade.snap(1);personal.view=PersonalView::None;
@@ -34,6 +38,15 @@ int verifyPersonal(const std::filesystem::path& directory,bool provider,bool nat
     personalRefreshRows(PersonalView::Chats);personalShow(PersonalView::Chats);personal.transition.snap(1);render();check(exportFrame(directory/L"personal-chats.bmp"),"export saved chat management");
     personalRefreshRows(PersonalView::Memory);personalShow(PersonalView::Memory);personal.transition.snap(1);render();check(exportFrame(directory/L"personal-memory.bmp"),"export memory provenance and management");
     personalEditor("memory",L"Editar preferência · nome: valor",L"response_style: brief-private-marker",personal.rows.front().value("id",""));personal.transition.snap(1);render();check(exportFrame(directory/L"personal-editor.bmp"),"export inline editor using the existing native text input");personalCloseView();personal.view=PersonalView::None;
+    auto verifyOverlay=[&](PersonalView view,const wchar_t* file){
+        personalShow(view);personal.transition.snap(1);render();std::set<int> ids;bool valid=true;
+        for(auto& hit:hits)valid=valid&&!hit.name.empty()&&ids.insert(hit.id).second&&hit.rect.left>=0&&hit.rect.right<=736&&hit.rect.top>=0&&hit.rect.bottom<=470;
+        check(valid,"overlay controls have unique keyboard targets, names and valid bounds");check(exportFrame(directory/file),"export native conversation or memory review flow");
+    };
+    verifyOverlay(PersonalView::NewChat,L"personal-new-chat.bmp");
+    personal.memoryDraft={{"key","response_style"},{"previous","brief-private-marker"},{"value","Concise answers with one example"}};verifyOverlay(PersonalView::Remember,L"personal-remember.bmp");
+    personal.editorID="all-data";verifyOverlay(PersonalView::Delete,L"personal-delete.bmp");
+    personalEditor("memory",L"Nova preferência · nome: valor");verifyOverlay(PersonalView::Editor,L"personal-editor-empty.bmp");personalCloseView();personalRevoke();personal.view=PersonalView::None;
     if(provider){
         assistantProvider=1;detectAssistant(1);connectAssistant();auto until=GetTickCount64()+60000;
         while(connectionState[1]==hext::ConnectionState::Checking&&GetTickCount64()<until){pollAssistantConnection();Sleep(20);}

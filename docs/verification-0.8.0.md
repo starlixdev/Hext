@@ -1,5 +1,7 @@
 # Hext 0.8.0 verification
 
+The 0.8.1 follow-up gives close and cancel controls separate keyboard targets, clears stale notices, persists the last reopened chat, and preserves dirty chats when saving fails. Expanded controller verification covers a real storage payload-limit failure, canceled conversation switching, unique targets, and native frames for new-chat, memory-replacement review, delete-all confirmation, and the empty preference editor. Core integration results below also apply to 0.8.1; no provider or native action contract changed.
+
 Validated on Windows 11 build 26200.9711, MinGW-w64, with Codex CLI 0.162.1, on November 17, 2026. This records observed local results; it is not certification of every Windows version, provider version, or account.
 
 | Component | Observed result |
