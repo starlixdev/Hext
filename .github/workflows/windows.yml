@@ -85,7 +85,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             $taskAssets = Get-ChildItem release/app -Recurse -File | Where-Object {$_.Name -in @('Hext-Windows-x64.zip','SHA256SUMS.txt')}
             if ($taskAssets.Count -ne 2) { throw 'Release assets are missing' }
-            $taskNotes = "Added permission-gated structured assistant actions, encrypted saved conversations, bounded shared preference memory, response language settings, and optional Spotify PKCE integration. Codex requires a supported protected Windows sandbox; Claude requires the documented tool restrictions. Spotify requires user configuration and account authorization. See docs/assistant.md and docs/verification-0.8.0.md for tested flows and account-dependent limits. Native audio controls and the desktop island remain available."
+            $taskNotes = "Added task-oriented planning across real tool results, on-demand setup with original-request resumption, a common integrations/capabilities hub, native adapter registration, reviewed declarative skills, installed desktop-app discovery, and bounded authorized text operations. Added service/action permission overrides and target-aware Windows media policy. Conversations, memory, language, native controls, and island behavior remain available. See docs/tasks.md and docs/verification-0.9.0.md for observed validation and account-dependent limits."
             gh release create "v$taskVersion" $taskAssets.FullName --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Hext $taskVersion" --notes $taskNotes --latest
             if ($LASTEXITCODE -ne 0) { throw 'Could not publish Hext' }
           }

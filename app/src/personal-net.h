@@ -68,6 +68,7 @@ inline std::optional<std::string> oauthCode(const std::string& request,const std
     return values["code"];
 }
 struct SpotifySnapshot {
+    DWORD httpStatus=0;
     bool busy=false,credentials=false,connected=false;std::wstring status=L"Conecte sua conta.";
     std::vector<Json> tracks,devices;std::string device;int volume=50;bool supportsVolume=false;
     bool completed=false,success=false;std::string receipt;
@@ -101,8 +102,9 @@ class SpotifyService {
         return reply;
     }
     std::wstring failure(const HttpReply& r){
+        {std::lock_guard<std::mutex> lock(mutex);state.httpStatus=r.status;}
         if(r.error)return L"Não foi possível confirmar a operação. Verifique a conexão antes de repetir.";
-        if(r.status==401){std::lock_guard<std::mutex> lock(mutex);state.connected=false;return L"A sessão expirou. Conecte sua conta novamente.";}
+        if(r.status==401){std::lock_guard<std::mutex> lock(mutex);state.connected=false;state.credentials=false;return L"A sessão expirou. Conecte sua conta novamente.";}
         if(r.status==403)return L"Acesso recusado. Confira Premium, permissões e a lista de usuários do aplicativo Spotify.";
         if(r.status==404)return L"Abra o Spotify e selecione um dispositivo disponível.";
         if(r.status==429)return L"Limite do Spotify atingido. Aguarde antes de tentar novamente.";
@@ -112,7 +114,7 @@ class SpotifyService {
         if(active.exchange(true))return false;
         if(worker.joinable())worker.join();
         stopRequested=false;
-        {std::lock_guard<std::mutex> lock(mutex);state.busy=true;state.completed=false;state.receipt.clear();}
+        {std::lock_guard<std::mutex> lock(mutex);state.busy=true;state.completed=false;state.receipt.clear();state.httpStatus=0;}
         worker=std::thread([this,fn]{try{fn();}catch(...){finish(false,L"Não foi possível concluir a conexão com o Spotify.","spotify.error");}{std::lock_guard<std::mutex> lock(mutex);state.busy=false;}active=false;});return true;
     }
 public:

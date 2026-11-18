@@ -40,7 +40,8 @@ struct MediaSession:IInspectable {
     virtual HRESULT STDMETHODCALLTYPE next(MediaOperation<BYTE>**)=0;
     virtual HRESULT STDMETHODCALLTYPE previous(MediaOperation<BYTE>**)=0;
 };
-struct MediaManager:IInspectable {virtual HRESULT STDMETHODCALLTYPE current(MediaSession**)=0;};
+struct MediaSessions:IInspectable {virtual HRESULT STDMETHODCALLTYPE at(UINT32,MediaSession**)=0;virtual HRESULT STDMETHODCALLTYPE size(UINT32*)=0;};
+struct MediaManager:IInspectable {virtual HRESULT STDMETHODCALLTYPE current(MediaSession**)=0;virtual HRESULT STDMETHODCALLTYPE sessions(MediaSessions**)=0;};
 struct MediaManagerFactory:IInspectable {virtual HRESULT STDMETHODCALLTYPE request(MediaOperation<MediaManager*>**)=0;};
 template<class T> struct MediaPtr {T* p=nullptr;~MediaPtr(){if(p)p->Release();}T* operator->()const{return p;}};
 template<class T> HRESULT mediaAwait(MediaOperation<T>* op,T* result,const std::atomic<bool>& cancelled){
@@ -54,8 +55,11 @@ template<class T> HRESULT mediaAwait(MediaOperation<T>* op,T* result,const std::
     if(status!=1){HRESULT error=E_FAIL;info->error(&error);return FAILED(error)?error:E_FAIL;}
     return op->results(result);
 }
-struct MediaResult {HRESULT code=E_PENDING;bool session=false,accepted=false,confirmed=false;INT32 playback=-1;std::string operation;};
-inline MediaResult mediaCommand(const std::string& operation,const std::atomic<bool>& cancelled){
+struct MediaResult {HRESULT code=E_PENDING;bool session=false,accepted=false,confirmed=false,spotify=false;INT32 playback=-1;std::string operation;};
+inline bool spotifyMediaSource(MediaSession* session){
+    HSTRING id=nullptr;if(!session||FAILED(session->appID(&id)))return false;UINT32 length=0;auto text=WindowsGetStringRawBuffer(id,&length);std::wstring source=text?std::wstring(text,length):L"";WindowsDeleteString(id);if(!source.empty())CharLowerBuffW(source.data(),static_cast<DWORD>(source.size()));return source.find(L"spotify")!=std::wstring::npos;
+}
+inline MediaResult mediaCommand(const std::string& operation,const std::atomic<bool>& cancelled,const std::string& application="",bool blockSpotify=false){
     MediaResult out;out.operation=operation;
     auto initialized=RoInitialize(RO_INIT_MULTITHREADED);if(FAILED(initialized)){out.code=initialized;return out;}
     struct Apartment {~Apartment(){RoUninitialize();}} apartment;
@@ -68,8 +72,15 @@ inline MediaResult mediaCommand(const std::string& operation,const std::atomic<b
     MediaPtr<MediaOperation<MediaManager*>> request;hr=factory->request(&request.p);MediaPtr<MediaManager> manager;
     if(SUCCEEDED(hr))hr=mediaAwait(request.p,&manager.p,cancelled);
     if(FAILED(hr)||!manager.p){out.code=FAILED(hr)?hr:E_NOINTERFACE;return out;}
-    MediaPtr<MediaSession> session;hr=manager->current(&session.p);
+    MediaPtr<MediaSession> session;
+    if(application=="spotify"){
+        MediaPtr<MediaSessions> sessions;UINT32 count=0;hr=manager->sessions(&sessions.p);if(SUCCEEDED(hr)&&sessions.p&&SUCCEEDED(sessions->size(&count)))for(UINT32 index=0;index<std::min<UINT32>(count,64)&&!cancelled;index++){
+            MediaPtr<MediaSession> candidate;if(SUCCEEDED(sessions->at(index,&candidate.p))&&spotifyMediaSource(candidate.p)){session.p=candidate.p;candidate.p=nullptr;break;}
+        }
+    }else hr=manager->current(&session.p);
     if(FAILED(hr)||!session.p){out.code=HRESULT_FROM_WIN32(ERROR_NOT_FOUND);return out;}out.session=true;
+    out.spotify=spotifyMediaSource(session.p);
+    if(blockSpotify&&out.spotify){out.code=E_ACCESSDENIED;return out;}
     MediaPtr<MediaPlayback> playback;if(SUCCEEDED(session->playback(&playback.p))&&playback.p)playback->status(&out.playback);
     if(operation=="inspect"){out.code=S_OK;return out;}
     MediaPtr<MediaOperation<BYTE>> action;
@@ -91,11 +102,11 @@ public:
     ~MediaService(){cancelled=true;if(worker.joinable())worker.join();}
     bool busy()const{return active;}
     void cancel(){cancelled=true;std::lock_guard<std::mutex> lock(mutex);result.reset();}
-    bool start(const std::string& op){
+    bool start(const std::string& op,const std::string& application="",bool blockSpotify=false){
         if(active.exchange(true))return false;
         if(worker.joinable())worker.join();
         cancelled=false;{std::lock_guard<std::mutex> lock(mutex);result.reset();}
-        worker=std::thread([this,op]{auto next=mediaCommand(op,cancelled);if(!cancelled){std::lock_guard<std::mutex> lock(mutex);result=next;}active=false;});return true;
+        worker=std::thread([this,op,application,blockSpotify]{auto next=mediaCommand(op,cancelled,application,blockSpotify);if(!cancelled){std::lock_guard<std::mutex> lock(mutex);result=next;}active=false;});return true;
     }
     std::optional<MediaResult> poll(){std::lock_guard<std::mutex> lock(mutex);auto next=result;result.reset();return next;}
 };

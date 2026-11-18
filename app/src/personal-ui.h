@@ -2,11 +2,13 @@
 void personalParagraph(const std::wstring& value,float x,float y,float w,float h,int size=12,UINT tint=0xB7B7C1){
     IDWriteTextLayout* layout=nullptr;
     if(SUCCEEDED(textFactory->CreateTextLayout(value.c_str(),static_cast<UINT32>(value.size()),font(size,false),w,h,&layout))){
-        layout->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);use(tint);canvas->DrawTextLayout(D2D1::Point2F(x,y),layout,brush);layout->Release();
+        layout->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);use(tint);canvas->DrawTextLayout(D2D1::Point2F(x,y),layout,brush,D2D1_DRAW_TEXT_OPTIONS_CLIP);layout->Release();
     }
 }
+#include "task-ui.h"
 void drawPersonalOverlay(){
     auto view=personal.view;
+    if(view==PersonalView::Capabilities||view==PersonalView::Capability||view==PersonalView::Setup||view==PersonalView::SkillReview){drawTaskOverlay();return;}
     text(view==PersonalView::Chats?L"Conversas":view==PersonalView::Memory?L"Memória":view==PersonalView::Assets?L"Itens autorizados":view==PersonalView::Editor?personal.editorTitle:L"Assistant",204,87,454,21,0xF5F5F8,true);
     iconButton(3191,0xE711,L"Fechar painel",676,87,30,30);
     canvas->PushLayer(D2D1::LayerParameters(D2D1::RectF(196,125,722,470),nullptr,D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,D2D1::IdentityMatrix(),unit(personal.transition.value)),nullptr);
@@ -38,8 +40,12 @@ void drawPersonalOverlay(){
         button(3092,personal.pendingChat.empty()?L"Salvar e criar nova":L"Salvar e abrir",204,377,244,35,true);button(3093,personal.pendingChat.empty()?L"Descartar e criar nova":L"Descartar e abrir",460,377,252,35);button(3090,L"Cancelar",554,424,158,30);
     }else if(view==PersonalView::Action){
         symbol(0xE72E,440,173,32,0xC9C9D2);alignedText(L"Permitir esta ação?",204,230,508,30,20,0xF0F0F5,true);
-        if(personal.approval)personalParagraph(personalActionLabel(personal.approval->request),236,284,444,70,16,0xE5E5ED);
-        personalParagraph(L"Esta autorização vale somente para esta solicitação e expira em dois minutos.",236,354,444,38,12);
+        if(personal.approval){
+            auto& request=personal.approval->request;bool creating=request.name=="files.create_text";
+            personalParagraph(personalActionLabel(request),236,creating?266:284,444,creating?58:70,creating?12:16,0xE5E5ED);
+            if(creating){box(228,326,460,63,0xFFFFFF,8,.045f);personalParagraph(hext::wide(hext::utf8Excerpt(request.args["text"],0,240)),238,332,440,49,11,0xC8C8D2);}
+        }
+        personalParagraph(L"Esta autorização vale somente para esta solicitação e expira em dois minutos.",236,personal.approval&&personal.approval->request.name=="files.create_text"?391:354,444,personal.approval&&personal.approval->request.name=="files.create_text"?18:38,personal.approval&&personal.approval->request.name=="files.create_text"?9:12);
         button(3090,L"Cancelar",204,414,244,35);button(3095,L"Permitir uma vez",460,414,252,35,true);
     }else if(view==PersonalView::Remember){
         symbol(0xE8A5,440,173,32,0xC9C9D2);alignedText(L"Guardar esta preferência?",204,230,508,30,20,0xF0F0F5,true);
@@ -62,11 +68,14 @@ void drawPersonalSpotify(){
     auto state=personal.spotify.snapshot();
     if(personal.spotifyPage==0){
         box(204,168,508,112,0xFFFFFF,13,.045f);text(L"Spotify",220,183,450,16,0xF0F0F5,true);
-        personalParagraph(state.status,220,214,476,54,12);
-        button(3080,L"Configurar Client ID",204,298,244,32);
-        button(3081,state.busy?L"Conectando…":state.credentials?L"Verificar conexão":L"Conectar",460,298,252,32,true);
+        bool desktop=personal.view==PersonalView::Setup&&personal.setupReason=="desktop-player";
+        personalParagraph(desktop?L"Não foi encontrado um player Spotify ativo. Você pode abrir o aplicativo ou conectar sua conta para continuar.":state.status,220,214,476,54,12);
+        button(desktop?3317:personal.view==PersonalView::Setup?3316:3080,desktop?L"Abrir Spotify e verificar":personal.view==PersonalView::Setup?L"Configuração oficial":L"Configurar Client ID",204,298,244,32,desktop);
+        button(3310,state.busy?L"Conectando…":desktop?L"Conectar conta…":!hext::SpotifyService::validClient(personal.spotify.clientID())?L"Configurar e conectar":state.credentials?L"Verificar conexão":L"Conectar",460,298,252,32,!desktop);
         if(state.credentials){button(3083,L"Pesquisar músicas",204,344,244,32);button(3084,L"Dispositivos",460,344,252,32);button(3190,L"Gerenciar acesso",204,414,244,30);button(3082,L"Desconectar",554,414,158,30);}
-        else personalParagraph(L"Conexão opcional. O controle de reprodução depende de Spotify Premium e do acesso autorizado ao aplicativo.",220,356,476,62,12);
+        else personalParagraph(personal.view==PersonalView::Setup?L"O Hext retoma o pedido após a conexão. O Client ID e a autorização da sua conta precisam ser fornecidos por você.":L"Conexão opcional. O controle de reprodução depende de Spotify Premium e do acesso autorizado ao aplicativo.",220,356,476,62,12);
+        if(personal.view!=PersonalView::Setup)button(3311,L"Permissões",204,414,160,30);
+        if(personal.setupReason=="device"||personal.setupReason=="select-device")button(3317,L"Abrir Spotify",204,375,244,30);
     }else{
         button(3089,L"Voltar",204,168,100,30);button(3083,L"Pesquisar",316,168,180,30);button(3084,L"Dispositivos",508,168,204,30);
         if(personal.spotifyPage==1){
@@ -89,7 +98,7 @@ void drawPersonalSpotify(){
     }
 }
 void drawPersonalSettings(){
-    const wchar_t* names[]={L"Provedor",L"Ações",L"Memória",L"Dados",L"Spotify"};
+    const wchar_t* names[]={L"Provedor",L"Ações",L"Memória",L"Dados",L"Capacidades"};
     for(int i=0;i<5;i++)button(3000+i,names[i],204+i*102.f,130,100,28,false,personal.settingsTab==i);
     canvas->PushLayer(D2D1::LayerParameters(D2D1::RectF(196,164,722,470),nullptr,D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,D2D1::IdentityMatrix(),unit(personal.transition.value)),nullptr);
     if(personal.settingsTab==0){
@@ -115,7 +124,7 @@ void drawPersonalSettings(){
         box(204,168,508,90,0xFFFFFF,13,.045f);text(L"Suas conversas",220,184,476,15,0xF0F0F5,true);text(L"Históricos independentes, salvos neste computador",220,211,476,12,0xB7B7C1);
         button(3070,L"Conversas salvas",204,278,244,34,true);button(3091,L"Salvar conversa atual",460,278,252,34);button(3071,L"Itens autorizados",204,330,508,34);
         button(3075,L"Apagar dados do Assistant",204,414,300,30);personalParagraph(L"Gerencie aplicativos, arquivos e pastas que podem ser abertos.",220,381,476,24,12);
-    }else drawPersonalSpotify();
+    }else drawCapabilityList();
     if(!personal.notice.empty())text(personal.notice,212,448,492,10,0xD9D9E2);
     canvas->PopLayer();
 }

@@ -1,6 +1,6 @@
 # Personal assistant
 
-Open **Personalizar → Assistant**. The five tabs manage the provider, actions, memory, local data, and Spotify. Responses support automatic language selection, Brazilian Portuguese, and English. This changes assistant responses; the application interface remains Portuguese.
+Open **Personalizar → Assistant**. The five tabs manage the provider, actions, memory, local data, and a general **Capacidades** resource list. Services do not require separate main tabs. Responses support automatic language selection, Brazilian Portuguese, and English. This changes assistant responses; the application interface remains Portuguese. See [Tasks and capabilities](tasks.md) for planning, on-demand preparation, and extension points.
 
 ## Connect a provider
 
@@ -14,7 +14,7 @@ The older generic CLI selector remains for configuration compatibility, but arbi
 
 ## Actions and autonomy
 
-The model returns a typed JSON envelope. Hext rejects unknown actions, extra fields, invalid parameters, and incompatible responses. It validates the complete action batch before executing any action. The host, not the model, issues completion receipts.
+The model returns a typed JSON envelope generated from Hext's tool registry. Hext rejects unknown actions, extra fields, invalid parameters, and incompatible responses. It validates the complete action batch before executing any action. The host issues execution receipts. The model uses those results to plan dependent steps and stops when the task is answered, blocked, or completed. Missing registered resources can be configured directly in the conversation without repeating the original request.
 
 | Mode | Behavior |
 | --- | --- |
@@ -26,7 +26,7 @@ The model returns a typed JSON envelope. Hext rejects unknown actions, extra fie
 
 Supported actions include native Windows volume/mute/default output, audio device discovery, Hext timers, default-browser searches, opening authorized applications/documents/folders, Windows media controls, Spotify controls, and optional saved-history search. History access defaults to denied. Manual controls explicitly clicked in the application remain available independently of the assistant's grants.
 
-Authorize individual executables, documents, or folders under **Dados → Itens autorizados**. Hext exposes opaque IDs and display names to the model, not arbitrary command lines. Only registered local paths can open. Executables must retain their registered modification timestamp and canonical path; changed programs require authorization again. Scripts, shortcuts, remote paths, and unlisted document extensions cannot be registered. This is a launch permission, not a sandbox for the application or document viewer you choose to trust. Hext does not expose file deletion, installation, administration, or arbitrary shell actions.
+Authorize individual executables, documents, or folders under **Dados → Itens autorizados**, or through a task's native chooser. Hext can discover installed desktop applications without authorizing their launch; a new target still requires explicit approval. It exposes opaque IDs and display names to the model, not arbitrary command lines. Executables must retain their registered modification timestamp and canonical path; changed programs require authorization again. Scripts, shortcuts, remote paths, and unlisted document extensions cannot be registered. This is a launch permission, not a sandbox for the application or document viewer you choose to trust. Text reads, bounded folder listing, and new non-overwriting `.txt`/`.md` creation are available with separate confirmation. Hext does not expose file deletion, installation, administration, or arbitrary shell actions.
 
 Browser searches open the default browser through Windows. A launch receipt confirms Windows accepted the request; it does not claim that the web page loaded or that Hext inspected its contents. Windows media controls use the current GSMTC player session; availability and supported commands depend on that player.
 
@@ -42,11 +42,11 @@ Searching previous saved chats requires the separate **Conversas anteriores** pe
 
 ## Spotify
 
-Spotify is optional. Create your own application in the [Spotify developer dashboard](https://developer.spotify.com/dashboard), register **http://127.0.0.1/callback**, and enter its public **Client ID** in Hext. No client secret is needed. The loopback callback uses a dynamically assigned port, random state, and PKCE S256. Hext requests `user-read-playback-state` and `user-modify-playback-state` only. Login and consent occur in your browser.
+Spotify is a resource under **Capacidades**, with setup also available directly from a task. Basic controls can use an identified Spotify Windows media session without API credentials. Catalog search and Web API playback are optional: create your own application in the [Spotify developer dashboard](https://developer.spotify.com/dashboard), register **http://127.0.0.1/callback**, and enter its public **Client ID** in Hext. No client secret is needed. The loopback callback uses a dynamically assigned port, random state, and PKCE S256. Hext requests `user-read-playback-state` and `user-modify-playback-state` only. Login and consent occur in your browser. The original pending task resumes after readiness and fresh permission checks.
 
 Open Spotify on a device, connect in Hext, then search, choose a track, select a device, and use playback controls. Search returns up to five tracks. Device enumeration, transfer, pause/resume, previous/next, and volume requests use the official Web API. State is checked after play/pause/volume when available. A command-accepted result is distinguished from a confirmed state. Network failures, expired sessions, restricted devices, missing players, authorization failures, and rate limits are reported without a simulated success. Ambiguous failed writes are not retried automatically.
 
-Playback requires Spotify Premium and the application's approved access. Development mode has account and user allowlist limits; a personal Client ID does not provide unrestricted public access. See [quota modes](https://developer.spotify.com/documentation/web-api/concepts/quota-modes), [PKCE](https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow), and [redirect rules](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri).
+Web API playback requires Spotify Premium and the application's approved access. Development mode has account and user allowlist limits; a personal Client ID does not provide unrestricted public access. Windows-session control depends on the player's own support and does not perform an API search. See [quota modes](https://developer.spotify.com/documentation/web-api/concepts/quota-modes), [PKCE](https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow), and [redirect rules](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri).
 
 This is a text/manual control integration. Spotify voice control is blocked, and Spotify track metadata stays in the local Spotify panel rather than entering the model context, memory, or saved chat history. It includes Spotify attribution and links. Hext does not stream, amplify, equalize, record, or analyze Spotify audio. See [Spotify developer policy](https://developer.spotify.com/policy).
 
@@ -60,4 +60,4 @@ Messages and selected context are transmitted to your selected provider. CLI dia
 
 **Dados → Apagar dados do Assistant** removes local histories, memory, authorized items, connection data, and assistant preferences, and cancels pending requests. It preserves island appearance, audio, and keyboard settings and leaves global CLI sign-ins intact. SQLite secure deletion clears deleted record payloads, but this is not a guarantee of forensic removal from backups or storage hardware. Review any backups separately.
 
-See [0.8.0 validation](verification-0.8.0.md) for tested flows and remaining account-dependent verification.
+See [0.9.0 validation](verification-0.9.0.md) for tested flows and remaining account-dependent verification.

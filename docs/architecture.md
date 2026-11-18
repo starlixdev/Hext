@@ -21,7 +21,7 @@ Only shortcut editing installs a temporary keyboard hook. It stops on save, canc
 
 ## Personal assistant components
 
-`personal-core.h` owns strict JSON validation, the action catalog, permission gate, one-use approval tickets, encrypted SQLite store, bounded memory, and registered-asset validation. `personal-state.h` contains controller state. `personal-runtime.h` handles conversations, context construction, dispatch, cancellation, and host-authored receipts. `personal-ui.h` draws these flows using existing controls and springs, inside the same island. `personal-verification.h` exercises the actual controller in an isolated application instance.
+`personal-core.h` owns strict JSON validation, the permission gate, one-use approval tickets, encrypted SQLite store, bounded memory, and registered-asset validation. Its included `capability-registry.h` defines one discoverable catalog and generates validation/provider schemas from it. `personal-state.h` contains controller state. `personal-runtime.h` handles conversations, context construction, dispatch, cancellation, and host-authored receipts. `personal-ui.h` draws these flows using existing controls and springs, inside the same island. `personal-verification.h` exercises the actual controller in an isolated application instance. The task engine and native adapter contract are described in [Tasks and capabilities](tasks.md).
 
 The flow is: native input → bounded context → restricted CLI → strict JSON envelope → validate entire batch → permission gate → approval if needed → typed native executor → observed outcome. Unknown commands never become shell strings. The gate is evaluated again before dispatch. Permission revisions and conversation IDs invalidate old approvals. Failed actions stop the remaining batch.
 
@@ -29,6 +29,6 @@ Short Core Audio and timer operations run on the UI thread. Spotify HTTPS/OAuth 
 
 `personal-net.h` uses fixed Spotify HTTPS hosts, disables redirects, validates OAuth state, and uses WinHTTP and Windows cryptography. `personal-media.h` calls GSMTC through the native WinRT ABI. Neither requires a web runtime. Existing audio, shortcuts, monitoring, desktop visibility, and island morph services remain intact.
 
-To add an action, extend exact validation in `actionRequest`, the provider schema, permission mapping, concrete executor/receipt, and denied/allowed/failure tests. New integrations must use the gate and treat external content as untrusted. Dynamically loaded executors are not supported.
+To add an action, register its typed schema/capability and native executor, then add denied/allowed/failure checks. Validation and provider schema generation use that registry. New integrations must use the gate and treat external content as untrusted. Reviewed declarative skills compose existing tools without executable plugins. Dynamically loaded executors are not supported.
 
 Persistence uses transactions, full SQLite synchronization, no WAL, secure deletion, a 64 MB page ceiling, and a one-megabyte payload limit. Each payload is DPAPI-encrypted. User drafts start transient; saved conversations autosave. Visual settings remain in `hext.ini`; private data lives under LocalAppData. Provider-owned authentication is not copied into Hext.

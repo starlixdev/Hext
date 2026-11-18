@@ -38,6 +38,18 @@ inline bool fields(const Json& value,std::initializer_list<const char*> required
     for(auto it=value.begin();it!=value.end();++it)if(!allowed.count(it.key()))return false;
     return true;
 }
+inline std::optional<std::string> completedProviderTurn(const std::string& stream){
+    size_t start=0;std::optional<std::string> response;
+    while(start<stream.size()){
+        auto end=stream.find('\n',start);if(end==std::string::npos)break;auto event=parseJSON(stream.substr(start,end-start));start=end+1;if(!event||!event->is_object()||!event->contains("type")||!(*event)["type"].is_string())continue;auto type=event->value("type","");
+        if(type=="turn.started")response.reset();
+        if(type=="turn.failed"||type=="error")return {};
+        if(type=="item.completed"&&event->contains("item")&&(*event)["item"].is_object()){
+            auto& item=(*event)["item"];if(item.contains("type")&&item["type"]=="agent_message"){response.reset();if(item.contains("text")&&item["text"].is_string()){auto text=item["text"].get<std::string>();auto parsed=parseJSON(text);if(parsed&&parsed->is_object())response=text;}}
+        }
+        if(type=="turn.completed"&&response)return response;
+    }return {};
+}
 inline bool textField(const Json& j,const char* key,size_t max,bool empty=false){
     if(!j.contains(key)||!j[key].is_string())return false;
     const auto& s=j[key].get_ref<const std::string&>();
@@ -139,39 +151,38 @@ inline const wchar_t* categoryName(Category c){const wchar_t* names[]={L"Áudio 
 struct AssistantPreferences {
     Autonomy autonomy=Autonomy::Ask;std::array<Grant,static_cast<int>(Category::Count)> grants{};
     bool memory=true;std::string language="auto",searchEngine="https://www.google.com/search?q=";unsigned revision=1;
+    std::map<std::string,Grant> serviceGrants,toolGrants;
     AssistantPreferences(){grants.fill(Grant::Ask);grants[static_cast<int>(Category::History)]=Grant::Deny;}
-    Json json()const{Json out={{"autonomy",static_cast<int>(autonomy)},{"memory",memory},{"language",language},{"grants",Json::array()}};for(auto g:grants)out["grants"].push_back(static_cast<int>(g));return out;}
-    void restore(const Json& j){if(!j.is_object())return;if(intField(j,"autonomy",0,2))autonomy=static_cast<Autonomy>(j["autonomy"].get<int>());if(j.contains("memory")&&j["memory"].is_boolean())memory=j["memory"].get<bool>();if(j.contains("language")&&j["language"].is_string()){auto l=j["language"].get<std::string>();if(l=="auto"||l=="pt-BR"||l=="en")language=l;}if(j.contains("grants")&&j["grants"].is_array()&&j["grants"].size()==grants.size())for(size_t i=0;i<grants.size();i++)if(j["grants"][i].is_number_integer()){int v=j["grants"][i].get<int>();if(v>=0&&v<=2)grants[i]=static_cast<Grant>(v);}}
+    Json json()const{Json out={{"autonomy",static_cast<int>(autonomy)},{"memory",memory},{"language",language},{"grants",Json::array()},{"services",Json::object()},{"tools",Json::object()}};for(auto g:grants)out["grants"].push_back(static_cast<int>(g));for(auto& g:serviceGrants)out["services"][g.first]=static_cast<int>(g.second);for(auto& g:toolGrants)out["tools"][g.first]=static_cast<int>(g.second);return out;}
+    void restore(const Json& j){if(!j.is_object())return; for(auto field:{"services","tools"})if(j.contains(field)&&j[field].is_object())for(auto it=j[field].begin();it!=j[field].end();++it)if(it.key().size()<=64&&it.value().is_number_integer()){int grant=it.value().get<int>();if(grant>=0&&grant<=2)(std::string(field)=="services"?serviceGrants:toolGrants)[it.key()]=static_cast<Grant>(grant);}if(intField(j,"autonomy",0,2))autonomy=static_cast<Autonomy>(j["autonomy"].get<int>());if(j.contains("memory")&&j["memory"].is_boolean())memory=j["memory"].get<bool>();if(j.contains("language")&&j["language"].is_string()){auto l=j["language"].get<std::string>();if(l=="auto"||l=="pt-BR"||l=="en")language=l;}if(j.contains("grants")&&j["grants"].is_array()&&j["grants"].size()==grants.size())for(size_t i=0;i<grants.size();i++)if(j["grants"][i].is_number_integer()){int v=j["grants"][i].get<int>();if(v>=0&&v<=2)grants[i]=static_cast<Grant>(v);}}
 };
 enum class ActionOrigin {Text,Voice};
-struct ActionRequest {std::string name;Json args;Category category=Category::Audio;bool sensitive=false;ActionOrigin origin=ActionOrigin::Text;};
-inline std::optional<ActionRequest> actionRequest(const Json& value){
-    if(!fields(value,{"name","arguments"})||!textField(value,"name",64)||!value["arguments"].is_object())return {};
-    ActionRequest r;r.name=value["name"].get<std::string>();r.args=value["arguments"];auto& a=r.args;bool valid=false;
-    if(r.name=="audio.set_volume"){r.category=Category::Audio;valid=fields(a,{"percent"},{"device"})&&intField(a,"percent",0,100)&&(!a.contains("device")||textField(a,"device",256));r.sensitive=valid&&a["percent"].get<int>()>80;}
-    else if(r.name=="audio.set_mute"){r.category=Category::Audio;valid=fields(a,{"muted"},{"device"})&&a["muted"].is_boolean()&&(!a.contains("device")||textField(a,"device",256));}
-    else if(r.name=="audio.list_devices"){r.category=Category::Audio;valid=fields(a,{});}
-    else if(r.name=="audio.set_default_device"){r.category=Category::Audio;r.sensitive=true;valid=fields(a,{"device"})&&textField(a,"device",256);}
-    else if(r.name=="timer.start"){r.category=Category::Timers;valid=fields(a,{"minutes"})&&intField(a,"minutes",1,1440);}
-    else if(r.name=="timer.pause"){r.category=Category::Timers;valid=fields(a,{});}
-    else if(r.name=="browser.search"){r.category=Category::Browser;valid=fields(a,{"query"})&&textField(a,"query",512);}
-    else if(r.name=="apps.open"||r.name=="files.open"){r.category=r.name=="apps.open"?Category::Apps:Category::Files;valid=fields(a,{"id"})&&textField(a,"id",64);}
-    else if(r.name=="media.control"){r.category=Category::Media;valid=fields(a,{"operation"})&&textField(a,"operation",16);if(valid){auto op=a["operation"].get<std::string>();valid=op=="play"||op=="pause"||op=="next"||op=="previous";}}
-    else if(r.name=="spotify.search"||r.name=="spotify.play"){r.category=Category::Spotify;valid=fields(a,{"query"})&&textField(a,"query",256);}
-    else if(r.name=="spotify.pause"||r.name=="spotify.next"||r.name=="spotify.previous"||r.name=="spotify.resume"){r.category=Category::Spotify;valid=fields(a,{});}
-    else if(r.name=="spotify.set_volume"){r.category=Category::Spotify;valid=fields(a,{"percent"})&&intField(a,"percent",0,100);r.sensitive=valid&&a["percent"].get<int>()>80;}
-    else if(r.name=="history.search"){r.category=Category::History;valid=fields(a,{"query"})&&textField(a,"query",256);}
-    return valid?std::optional<ActionRequest>(r):std::nullopt;
-}
+struct ActionRequest {std::string name;Json args;Category category=Category::Audio;bool sensitive=false;ActionOrigin origin=ActionOrigin::Text;std::string nativeTarget;};
+#include "capability-registry.h"
+inline std::optional<ActionRequest> actionRequest(const Json& value){return toolRegistry().validate(value);}
+
 enum class Decision {Denied,Confirm,Execute};
 struct ActionTicket {std::string nonce,chat;ActionRequest request;unsigned revision=0;ULONGLONG expires=0;};
 class ActionGate {
     std::optional<ActionTicket> pending;
 public:
     Decision evaluate(const AssistantPreferences& p,const ActionRequest& r)const{
+        if(!r.nativeTarget.empty()){
+            if(r.nativeTarget!="spotify"||r.name!="media.control"||!textField(r.args,"operation",16))return Decision::Denied;
+            auto original=r;original.nativeTarget.clear();auto operation=r.args["operation"].get<std::string>();if(operation=="play")operation="resume";
+            auto target=actionRequest(Json{{"name","spotify."+operation},{"arguments",Json::object()}});if(!target)return Decision::Denied;target->origin=r.origin;
+            auto first=evaluate(p,original),second=evaluate(p,*target);return first==Decision::Denied||second==Decision::Denied?Decision::Denied:first==Decision::Confirm||second==Decision::Confirm?Decision::Confirm:Decision::Execute;
+        }
         if(static_cast<int>(r.category)<0||r.category>=Category::Count)return Decision::Denied;
         if(r.category==Category::Spotify&&r.origin==ActionOrigin::Voice)return Decision::Denied;
-        auto grant=p.grants[static_cast<int>(r.category)];if(p.autonomy==Autonomy::Chat||grant==Grant::Deny)return Decision::Denied;
+        auto definition=toolRegistry().find(r.name);auto grant=p.grants[static_cast<int>(r.category)];
+        auto resource=definition?definition->capability:std::string();if((r.name=="capabilities.connect"||r.name=="capabilities.inspect")&&textField(r.args,"id",64))resource=r.args["id"];
+        auto service=p.serviceGrants.find(resource);auto tool=p.toolGrants.find(r.name);
+        if(grant==Grant::Deny||(service!=p.serviceGrants.end()&&service->second==Grant::Deny)||(tool!=p.toolGrants.end()&&tool->second==Grant::Deny))return Decision::Denied;
+        if(definition&&definition->metadata)return Decision::Execute;
+        if(p.autonomy==Autonomy::Chat)return Decision::Denied;
+        if(service!=p.serviceGrants.end())grant=service->second;
+        if(tool!=p.toolGrants.end())grant=tool->second;
         return p.autonomy==Autonomy::Ask||grant==Grant::Ask||r.sensitive?Decision::Confirm:Decision::Execute;
     }
     ActionTicket propose(const AssistantPreferences& p,const ActionRequest& r,const std::string& chat){pending=ActionTicket{randomID(),chat,r,p.revision,GetTickCount64()+120000};return *pending;}

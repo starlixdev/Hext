@@ -1,10 +1,29 @@
 #pragma once
-enum class PersonalView {None,Chats,NewChat,Memory,Assets,Editor,Action,Remember,Delete};
+enum class PersonalView {None,Chats,NewChat,Memory,Assets,Editor,Action,Remember,Delete,Capabilities,Capability,Setup,SkillReview};
+struct NativeCapabilityAdapter {
+    std::function<hext::Json()> inspect;
+    std::function<bool(const hext::ActionRequest&)> execute;
+    std::function<void()> prepare;
+    std::function<std::pair<std::wstring,std::string>()> publicConfiguration;
+    std::function<void(const std::string&)> configure;
+    std::function<void()> disconnect;
+};
 struct PersonalState {
     hext::PersonalStore store;
     hext::MemoryManager memory{store};
     hext::SpotifyService spotify{store};
     hext::MediaService media;
+    hext::ApplicationDiscovery applications;
+    hext::SkillRegistry skills;
+    hext::TaskSession task;
+    std::map<std::string,NativeCapabilityAdapter> adapters;
+    std::map<std::string,hext::Json> resources;
+    std::optional<hext::ActionRequest> inFlight;
+    std::string capability="spotify",setupReason;
+    hext::Json skillDraft=nullptr;
+    bool applicationsOwned=false,preparing=false,playSelection=false,capabilityPermissions=false;
+    bool nativeSpotifyReady=false;ULONGLONG nativePrepareUntil=0,nativeRetryAt=0;
+    int capabilityPage=0,capabilityToolPage=0;
     hext::AssistantPreferences preferences;
     hext::ActionGate gate;
     PersonalView view=PersonalView::None,editorReturn=PersonalView::None;
@@ -23,6 +42,18 @@ struct PersonalState {
 };
 PersonalState personal;
 bool personalVerification=false,personalProviderVerification=false,personalNativeVerification=false;
+hext::Json personalCapabilityState(const std::string& id);
+hext::Json personalCapabilitiesContext();
+void personalPrepare();
+void personalResumeTask();
+void personalSuspendRejected(const hext::ActionRequest&,const std::string&,const std::string&);
+bool personalRequireSetup(const hext::ActionRequest& request);
+bool personalResourceAction(const hext::ActionRequest& request);
+hext::Json personalAsset(const std::string& id);
+std::string personalChooseAsset(bool app,bool folder=false);
+void personalImportSkill();
+void personalTaskAction(int id);
+bool personalRegisterAdapter(hext::CapabilityDefinition,std::vector<hext::ToolDefinition>,NativeCapabilityAdapter);
 void personalAction(int id);
 void personalPoll();
 void personalSaveChat();
@@ -35,4 +66,4 @@ void startTimer();
 void personalCloseView();
 void personalChangePage();
 void personalRevoke();
-bool personalBusy(){return assistantBridge.busy||personal.requestActive||personal.spotifyOwned||personal.mediaOwned;}
+bool personalBusy(){return assistantBridge.busy||personal.requestActive||personal.spotifyOwned||personal.mediaOwned||personal.applicationsOwned;}

@@ -13,3 +13,7 @@ The assistant validates a fixed action catalog and enforces permissions in nativ
 Private payloads use current-user DPAPI encryption and a restricted directory ACL under LocalAppData. Preference memory is separate from history. Both can be deleted in settings. Provider retention and global sign-ins remain provider-controlled. See [privacy and removal](docs/assistant.md#privacy-and-removal).
 
 Spotify uses PKCE, loopback state validation, encrypted tokens, fixed HTTPS endpoints, and no client secret. Disconnect deletes local tokens and caches; server-side revocation uses Spotify's account page. Spotify metadata is not sent to the model, and Spotify voice control is refused.
+
+Task preparation and execution are separate. New native adapters default to asking at the service level. Skills are reviewed JSON compositions of existing tools, not executable plugins; recursion, unknown tools, code, and schema changes are rejected. Generic Windows media commands apply additional Spotify policy when the source application is identified locally. Native-scoped target fields cannot be supplied in model JSON. Native adapter modules must be reviewed and compiled into Hext; the application does not download or load arbitrary MCP servers or DLLs.
+
+Authorized text operations remain bounded and reject scripts, path traversal, unsupported types, and overwrites. Revoking an authorized parent folder invalidates derived item IDs. External writes already accepted cannot be undone by canceling. See [task boundaries](docs/tasks.md).

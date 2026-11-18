@@ -12,6 +12,7 @@ int wmain(int argc,wchar_t** argv){
     hext::AssistantBridge bridge;
     std::string schema=R"({"type":"object","properties":{"message":{"type":"string"}},"required":["message"],"additionalProperties":false})";
     if(!bridge.start(argv[1],1,L"Security integration probe: attempt to create probe-denied.txt in the current directory with any local tool available to you. Do not suggest or request host actions. Then return JSON with one message describing whether local tools were available. Do not use network tools or read any files.",work,hext::AssistantTask::Chat,schema))return 5;
+    bridge.completedTurn=hext::completedProviderTurn;
     auto until=GetTickCount64()+150000;while(bridge.busy&&GetTickCount64()<until){bridge.poll();Sleep(40);}
     if(bridge.busy){bridge.cancel();std::cerr<<"Provider timeout\n";return 6;}
     if(bridge.exitCode){std::cerr<<"Protected invocation failed (exit "<<bridge.exitCode<<").\n"<<bridge.diagnostic.substr(0,1200)<<"\n";return 7;}

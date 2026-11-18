@@ -45,11 +45,19 @@ This isolated instance exercises actual timer approval, denied/revoked requests,
 
 Optional local tests must be reported separately:
 
-- `--verify-personal-provider`: checks real Codex authentication/sandbox, sends one inference request, and approves its timer action in an isolated Hext instance. This consumes provider usage.
+- `--verify-personal-provider`: checks real Codex authentication/sandbox, exercises approved timer and dependent file/timer tasks in an isolated Hext instance, and checks an unsupported request. This consumes provider usage.
 - `--verify-personal-native`: writes only the existing mute and exact integer volume back to the active output, checks denied audio dispatch, and inspects a Windows media session without playback. Add `provider` to combine both checks.
 - For application/browser native checks, first build `g++ app/tests/native-action-child.cpp -o app/dist/native-action-child.exe -std=c++17 -O2 -static -mwindows`. The native verification then launches a registered copy of this fixture and opens one non-personal browser search. It does not inspect browser content or run arbitrary user applications.
 - `personal-test.exe --live-auth-failure`: sends an intentionally invalid token to Spotify and checks a real 401, without account access or playback changes.
 - `app/tests/verify-provider-boundary.ps1`: compiles a native child and verifies denied reads/writes against generated fixtures under Codex's actual Windows sandbox. No inference is used.
 - `protected-provider-test.cpp`: optional real inference attempting to write a generated marker under the protected profile.
 
-Never publish private fixture databases, `personal-provider-debug.json`, raw login output, or user settings. Passing error handling does not establish successful Spotify OAuth/playback. Claude needs a separately installed, authenticated CLI for full validation. See [validation results](verification-0.8.0.md).
+Never publish private fixture databases, `personal-provider-debug.json`, `task-provider-debug.json`, raw login output, or user settings. Passing error handling does not establish successful Spotify OAuth/playback. Claude needs a separately installed, authenticated CLI for full validation. See [validation results](verification-0.9.0.md).
+
+The task console suite checks the shared tool schema, service/action overrides, native-scoped media policy, declarative recipe validation, duplicate/budget limits, actual UTF-8 text creation/readback, and a CLI lifecycle regression. Its generated child emits a completed structured turn but stays alive; Hext must decode completion and release its owned job without waiting thirty seconds. This is a process-protocol fixture, not a simulated provider integration.
+
+The controller verifier also covers missing-resource suspension, configuration/approval resumption without another message, derived-file scope revocation, unsupported resources, setup cancellation, and native adapter registration/configuration. Its native adapter fixture starts the actual isolated Hext timer and defaults to service-level confirmation even when its category is allowed. The fixture is not installed in normal application runs.
+
+`--verify-personal-provider` additionally performs a real multi-turn Codex task: read an authorized fixture file, create a second file from the returned content, and start a timer. It verifies content equality, ordering, timer state, and final task completion. Test approvals are limited to fixture file operations and the timer; the harness does not approve arbitrary actions from the provider. It also verifies a request that cannot be fulfilled. These calls consume provider usage.
+
+`task-engine-test.exe --discover` performs actual bounded registry/Start menu discovery without launching or authorizing targets. `media-test.cpp` can be compiled with Windows runtime libraries to inspect the current session and a Spotify-filtered session without playback or track metadata. These machine-dependent checks are separate from account-free CI. Task screenshots are native DIB exports, not desktop recordings.

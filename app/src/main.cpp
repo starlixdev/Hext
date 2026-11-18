@@ -36,6 +36,8 @@
 #include "personal-core.h"
 #include "personal-net.h"
 #include "personal-media.h"
+#include "task-engine.h"
+#include "native-resources.h"
 #include "hardware.h"
 #include "navigation.h"
 #include "sound.h"
@@ -269,6 +271,9 @@ void hit(int id,float x,float y,float w,float h,const std::wstring& name=L""){
 }
 UINT accentForeground(){return hext::foreground(accent());}
 bool controlEnabled(int id){
+    if(id==3310)return personal.ready&&!personal.preparing&&!personal.spotify.busy()&&!(personal.capability=="provider"&&connectionState[assistantProvider]==hext::ConnectionState::Checking);
+    if(id==3304)return personal.capabilityPage>0;
+    if(id==3305)return personal.capabilityPage<static_cast<int>((hext::capabilityDefinitions().size()-1)/4);
     if(id==3063)return personal.ready&&personal.preferences.memory;
     if(id==3080||id==3081||id==3083||id==3084||(id>=3085&&id<=3088)||(id>=3140&&id<3145)||(id>=3150&&id<3154))return personal.ready&&!personal.spotify.busy()&&!testMode;
     if(id==3095)return personal.approval&&GetTickCount64()<=personal.approval->expires;
@@ -720,7 +725,9 @@ bool assistantConfigured(){
     return assistantProvider>0&&connectionState[assistantProvider]==hext::ConnectionState::Connected;
 }
 void resetAssistantConnection(){
+    auto pending=personal.task;bool preserve=pending.stage==hext::TaskStage::Setup&&pending.capability=="provider";
     personalRevoke();
+    if(preserve){personal.task=pending;personal.requestActive=true;}
     if(probingProvider>0&&connectionState[probingProvider]==hext::ConnectionState::Checking)
         connectionState[probingProvider]=hext::ConnectionState::Disconnected;
     connectionProbe.cancel();probingProvider=0;
@@ -896,7 +903,7 @@ void executeCommand(){
 void action(int id){
     if(!controlEnabled(id))return;
     keyboardId=-1;
-    if(id>=3000&&id<3200)personalAction(id);
+    if(id>=3000&&id<3700)personalAction(id);
     else if(id>=100&&id<107)changePage(id-100);
     else if(id>=1000)soundAction(id);
     else if(id>=600&&id<=605){

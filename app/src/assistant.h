@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <functional>
+#include <optional>
 namespace hext {
 enum class AssistantTask {Chat,Version,Capabilities,Authentication,Protection};
 enum class ConnectionState {Disconnected,Checking,Connected,Missing,NeedsLogin,Incompatible,Error};
@@ -72,6 +74,7 @@ struct AssistantBridge {
     bool busy=false;DWORD exitCode=0;ULONGLONG started=0,timeoutMs=120000;
     std::string result,diagnostic,events;
     std::filesystem::path answerFile,schemaFile;
+    std::function<std::optional<std::string>(const std::string&)> completedTurn;
     ~AssistantBridge(){cancel();}
     static void close(HANDLE& h){if(h&&h!=INVALID_HANDLE_VALUE)CloseHandle(h);h=nullptr;}
     void cancel(){
@@ -90,7 +93,7 @@ struct AssistantBridge {
     }
     bool start(const std::wstring& executable,int provider,const std::wstring& prompt,
                const std::filesystem::path& work,AssistantTask task=AssistantTask::Chat,const std::string& schema=""){
-        cancel();result.clear();diagnostic.clear();events.clear();exitCode=0;
+        cancel();completedTurn={};result.clear();diagnostic.clear();events.clear();exitCode=0;
         std::error_code ec;std::filesystem::create_directories(work,ec);
         if(ec||!std::filesystem::is_regular_file(executable,ec))return false;
         SECURITY_ATTRIBUTES security{sizeof(security),nullptr,TRUE};
@@ -128,6 +131,7 @@ struct AssistantBridge {
             if(provider!=1&&provider!=2){CloseHandle(input);close(outputWrite);close(errorWrite);cancel();return false;}
             if(provider==1){
                 auto sandbox=std::find(args.begin(),args.end(),L"--sandbox");if(sandbox!=args.end())args.erase(sandbox,sandbox+2);
+                auto answer=std::find(args.begin(),args.end(),L"--output-last-message");if(answer!=args.end())args.erase(answer,answer+2);answerFile.clear();
                 schemaFile=work/(L".hext-schema-"+tag+L".json");std::ofstream file(schemaFile,std::ios::binary);file<<schema;file.close();
                 if(!file){CloseHandle(input);close(outputWrite);close(errorWrite);cancel();return false;}
                 args.insert(args.end()-1,{L"--ignore-user-config",L"--strict-config",L"--json",L"--output-schema",schemaFile.wstring(),L"--disable",L"shell_tool",
@@ -176,9 +180,11 @@ struct AssistantBridge {
     bool poll(){
         if(!busy)return false;
         drain(output,result);drain(error,diagnostic);
+        if(completedTurn)if(auto final=completedTurn(result)){events=result;result=*final;exitCode=0;cancel();return true;}
         if(GetTickCount64()-started>timeoutMs){cancel();exitCode=WAIT_TIMEOUT;return true;}
         if(WaitForSingleObject(process,0)!=WAIT_OBJECT_0)return false;
         drain(output,result);drain(error,diagnostic);GetExitCodeProcess(process,&exitCode);
+        if(completedTurn)if(auto final=completedTurn(result)){events=result;result=*final;exitCode=0;cancel();return true;}
         if(!answerFile.empty()){
             events=result;
             std::ifstream file(answerFile,std::ios::binary);

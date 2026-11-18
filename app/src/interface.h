@@ -204,7 +204,8 @@ void drawHome(){
     }
     drawAssistantInput();
     drawSendButton();
-    text(assistantStatus,212,433,492,12,0xB7B7C1);
+    text(assistantStatus,212,433,personal.task.active()&&personal.task.stage==hext::TaskStage::Setup?292:492,12,0xB7B7C1);
+    if(personal.task.active()&&personal.task.stage==hext::TaskStage::Setup)button(3315,L"Continuar configuração",516,429,196,30,true);
 }
 void drawTimer(){
     text(L"Temporizador",204,87,500,21,0xF5F5F8,true);
