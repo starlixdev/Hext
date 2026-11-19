@@ -61,3 +61,17 @@ The controller verifier also covers missing-resource suspension, configuration/a
 `--verify-personal-provider` additionally performs a real multi-turn Codex task: read an authorized fixture file, create a second file from the returned content, and start a timer. It verifies content equality, ordering, timer state, and final task completion. Test approvals are limited to fixture file operations and the timer; the harness does not approve arbitrary actions from the provider. It also verifies a request that cannot be fulfilled. These calls consume provider usage.
 
 `task-engine-test.exe --discover` performs actual bounded registry/Start menu discovery without launching or authorizing targets. `media-test.cpp` can be compiled with Windows runtime libraries to inspect the current session and a Spotify-filtered session without playback or track metadata. These machine-dependent checks are separate from account-free CI. Task screenshots are native DIB exports, not desktop recordings.
+
+## General agent verification
+
+The default console suite now includes agent-native-test (strict web/package inputs, permission migration, encrypted task snapshots, unknown-effect replay protection and bounded owned-child termination). The fresh-process restart test restores an interrupted task as paused, with its original goal and no execution replay.
+
+Optional local checks, reported separately from CI:
+
+- Compile app/tests/agent-sandbox-test.cpp with SQLite and -ladvapi32 -lcrypt32 -lbcrypt -luserenv -lole32. Run outside a restricted development sandbox: it creates a disposable AppContainer, writes/reads its own file across two invocations, and verifies denied private reads, external writes and network access (Windows socket error 10013).
+- agent-native-test.exe --desktop uses only an owned Win32 fixture and verifies real accessibility observation, password exclusion, value entry, stale-control rejection, invocation and independent observation. It closes its fixture afterwards.
+- agent-native-test.exe --web reads Microsoft documentation, searches Bing RSS and verifies the signed App Installer and official WinGet query path. It installs nothing.
+- Hext-preview.exe --verify-agent runs the actual controller with an owned native fixture: window consent, action approval, denial, visible-condition continuation, task pause/restore and native DIB exports.
+- Hext-preview.exe --verify-agent-provider additionally consumes real Codex usage. The provider generates a SHA-256 PowerShell calculation for a random input inside AppContainer, uses the actual hash in the fixture application, invokes its Apply control, observes the result and starts a real isolated timer. The verifier reads actual control text through cross-process Windows messages and checks an independent BCrypt digest. It never approves actions on personal windows or arbitrary packages.
+
+Wait for each hidden verifier process before reading its report. Do not replace a running preview executable. UI Automation runs in a separate MTA worker process with a bounded job; the worker flag must be parsed from Windows command-line arguments, including quotes. These fixtures are tests of real native operations, not successful external account authentication. See docs/verification-0.10.0.md for observed results and remaining limits.

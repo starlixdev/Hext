@@ -6,8 +6,10 @@ void personalParagraph(const std::wstring& value,float x,float y,float w,float h
     }
 }
 #include "task-ui.h"
+#include "agent-ui.h"
 void drawPersonalOverlay(){
     auto view=personal.view;
+    if(view==PersonalView::Tasks||view==PersonalView::WindowConsent||view==PersonalView::Intervention||view==PersonalView::OperationReview){drawAgentOverlay();return;}
     if(view==PersonalView::Capabilities||view==PersonalView::Capability||view==PersonalView::Setup||view==PersonalView::SkillReview){drawTaskOverlay();return;}
     text(view==PersonalView::Chats?L"Conversas":view==PersonalView::Memory?L"Memória":view==PersonalView::Assets?L"Itens autorizados":view==PersonalView::Editor?personal.editorTitle:L"Assistant",204,87,454,21,0xF5F5F8,true);
     iconButton(3191,0xE711,L"Fechar painel",676,87,30,30);
@@ -45,7 +47,8 @@ void drawPersonalOverlay(){
             personalParagraph(personalActionLabel(request),236,creating?266:284,444,creating?58:70,creating?12:16,0xE5E5ED);
             if(creating){box(228,326,460,63,0xFFFFFF,8,.045f);personalParagraph(hext::wide(hext::utf8Excerpt(request.args["text"],0,240)),238,332,440,49,11,0xC8C8D2);}
         }
-        personalParagraph(L"Esta autorização vale somente para esta solicitação e expira em dois minutos.",236,personal.approval&&personal.approval->request.name=="files.create_text"?391:354,444,personal.approval&&personal.approval->request.name=="files.create_text"?18:38,personal.approval&&personal.approval->request.name=="files.create_text"?9:12);
+        if(personal.approval&&!personalAgentLabel(personal.approval->request).empty())button(3440,L"Ver detalhes",204,365,154,28);
+        if(!personal.approval||personalAgentLabel(personal.approval->request).empty())personalParagraph(L"Esta autorização vale somente para esta solicitação e expira em dois minutos.",236,personal.approval&&personal.approval->request.name=="files.create_text"?391:354,444,personal.approval&&personal.approval->request.name=="files.create_text"?18:38,personal.approval&&personal.approval->request.name=="files.create_text"?9:12);
         button(3090,L"Cancelar",204,414,244,35);button(3095,L"Permitir uma vez",460,414,252,35,true);
     }else if(view==PersonalView::Remember){
         symbol(0xE8A5,440,173,32,0xC9C9D2);alignedText(L"Guardar esta preferência?",204,230,508,30,20,0xF0F0F5,true);
@@ -58,7 +61,7 @@ void drawPersonalOverlay(){
         button(3090,L"Agora não",204,414,244,35);button(3096,L"Guardar",460,414,252,35,true);
     }else if(view==PersonalView::Delete){
         symbol(0xE74D,440,176,32,0xC9C9D2);alignedText(personal.editorID.rfind("asset:",0)==0?L"Revogar esta autorização?":L"Excluir estes dados?",204,240,508,30,20,0xF0F0F5,true);
-        personalParagraph(personal.editorID=="all-data"?L"Conversas, memória, itens autorizados e a conexão Spotify serão excluídos do Hext. A autenticação dos CLIs não será alterada.":personal.editorID.rfind("chat:",0)==0?L"A conversa e suas memórias derivadas não fixadas serão excluídas do Hext.":L"Esta alteração é permanente. Solicitações pendentes também serão canceladas.",236,295,444,84,13);
+        personalParagraph(personal.editorID=="all-data"?L"Conversas, memória, itens autorizados, tarefas, ambientes isolados e conexões serão excluídos do Hext. A autenticação dos CLIs não será alterada.":personal.editorID=="agent-data"?L"Tarefas pendentes e arquivos nos ambientes isolados do Hext serão excluídos. Aplicativos instalados e documentos externos não serão removidos.":personal.editorID.rfind("chat:",0)==0?L"A conversa, suas tarefas e memórias derivadas não fixadas serão excluídas do Hext.":L"Esta alteração é permanente. Solicitações pendentes também serão canceladas.",236,295,444,84,13);
         button(3090,L"Cancelar",204,414,244,35);button(3097,personal.editorID.rfind("asset:",0)==0?L"Revogar":L"Excluir",460,414,252,35,true);
     }
     if(!personal.notice.empty())text(personal.notice,212,448,492,10,0xD9D9E2);
@@ -112,9 +115,9 @@ void drawPersonalSettings(){
     }else if(personal.settingsTab==1){
         text(L"Autonomia",220,174,476,13,0xDADAE4,true);
         const wchar_t* levels[]={L"Conversar",L"Pedir autorização",L"Ações permitidas"};for(int i=0;i<3;i++)button(3020+i,levels[i],204+i*172.f,200,164,31,false,static_cast<int>(personal.preferences.autonomy)==i);
-        for(int row=0;row<4;row++){int category=personal.permissionPage*4+row;float y=247+row*38.f;box(204,y,508,34,0xFFFFFF,8,.035f);alignedText(hext::categoryName(static_cast<hext::Category>(category)),218,y,304,34,12,0xDEDEE7,false,false);auto grant=personal.preferences.grants[category];button(3040+category,grant==hext::Grant::Deny?L"Negar":grant==hext::Grant::Ask?L"Perguntar":L"Permitir",536,y+2,164,30,false,grant==hext::Grant::Allow);}
-        button(3050,personal.permissionPage?L"Anteriores":L"Mais permissões",204,414,200,30);button(3170,L"Revogar todas",536,414,176,30);
-        alignedText(L"2/"+std::to_wstring(personal.permissionPage+1),416,414,80,30,10,0x9A9AA6,false,false);
+        for(int row=0;row<4;row++){int category=personal.permissionPage*4+row;if(category>=static_cast<int>(hext::Category::Count))break;float y=247+row*38.f;box(204,y,508,34,0xFFFFFF,8,.035f);alignedText(hext::categoryName(static_cast<hext::Category>(category)),218,y,304,34,12,0xDEDEE7,false,false);auto grant=personal.preferences.grants[category];button((category<8?3040:3400)+category,grant==hext::Grant::Deny?L"Negar":grant==hext::Grant::Ask?L"Perguntar":L"Permitir",536,y+2,164,30,false,grant==hext::Grant::Allow);}
+        button(3050,L"Próximas permissões",204,414,200,30);button(3170,L"Revogar todas",536,414,176,30);
+        alignedText(std::to_wstring((static_cast<int>(hext::Category::Count)+3)/4)+L"/"+std::to_wstring(personal.permissionPage+1),416,414,80,30,10,0x9A9AA6,false,false);
         if(personal.notice.empty())text(L"Ações sensíveis sempre exigem confirmação.",220,450,476,10,0xB7B7C1);
     }else if(personal.settingsTab==2){
         box(204,168,508,92,0xFFFFFF,13,.045f);drawToggle(3060,personal.preferences.memory,220,187,36,20,true);text(L"Memória compartilhada",268,189,420,14,0xEEEEF4,true);hit(3060,216,177,480,43,L"Ativar memória compartilhada");
@@ -122,7 +125,7 @@ void drawPersonalSettings(){
         personalParagraph(L"O assistente sugere informações úteis. Você decide o que guardar. Inferências não substituem preferências explícitas.",220,340,476,64,13);button(3062,L"Apagar memória",204,414,244,30);
     }else if(personal.settingsTab==3){
         box(204,168,508,90,0xFFFFFF,13,.045f);text(L"Suas conversas",220,184,476,15,0xF0F0F5,true);text(L"Históricos independentes, salvos neste computador",220,211,476,12,0xB7B7C1);
-        button(3070,L"Conversas salvas",204,278,244,34,true);button(3091,L"Salvar conversa atual",460,278,252,34);button(3071,L"Itens autorizados",204,330,508,34);
+        button(3070,L"Conversas salvas",204,278,244,34,true);button(3091,L"Salvar conversa atual",460,278,252,34);button(3071,L"Itens autorizados",204,330,244,34);button(3420,L"Tarefas pendentes",460,330,252,34);
         button(3075,L"Apagar dados do Assistant",204,414,300,30);personalParagraph(L"Gerencie aplicativos, arquivos e pastas que podem ser abertos.",220,381,476,24,12);
     }else drawCapabilityList();
     if(!personal.notice.empty())text(personal.notice,212,448,492,10,0xD9D9E2);

@@ -17,7 +17,7 @@ The previous implementation had separate hand-maintained action validation and p
 
 The flow is **request → catalog/readiness → provider plan → typed validation → permission gate → preparation or approval → native execution → tool result → next plan**. Each turn can request up to four actions. Dependent actions should wait for preceding results; for example, read a file before constructing a new document from its contents. Native execution remains serial within a task.
 
-Tasks have bounded planning: six provider turns and sixteen dispatch attempts. Ordinary writes cannot silently repeat within one task. Read-only operations have a small retry budget; repeatable media controls have a separate bounded allowance. Permission denial, cancellation, unsupported tools, ambiguous failed writes, and unrecoverable errors stop further execution. Completed effects are not rolled back.
+Tasks have bounded planning: twenty-four provider turns and sixty-four dispatch attempts. Ordinary writes cannot silently repeat within one task. Read-only observations have a sixteen-call per-request budget; repeatable media controls have a separate bounded allowance. Permission denial, cancellation, unsupported tools, ambiguous failed writes, and unrecoverable errors stop further execution. Completed effects are not rolled back.
 
 Codex structured responses are decoded from complete JSON stream events. A validated final agent message followed by `turn.completed` finishes the inference turn even if the CLI remains alive during cleanup. Hext then terminates only its owned process job. It does not wait indefinitely for CLI exit or write private answers into an output-message file. The normal timeout still applies when no complete response arrives.
 
@@ -29,7 +29,7 @@ After readiness is confirmed, Hext reinserts the pending step and evaluates curr
 
 Provider setup can also begin from a message: the request remains while the user selects/connects Codex or Claude. A configured provider resumes planning without another copy of the request. A registered desktop executable that changed after authorization requires fresh authorization in the native chooser, then resumes the original launch request.
 
-Pending tasks are held in memory. They do not automatically restart after quitting Hext. Saved conversations and shared preferences remain persistent; an interrupted external write is not blindly replayed after restart.
+Pending tasks now have encrypted checkpoints and explicit restart recovery. See [general agent persistence and boundaries](agent.md). External effects are never automatically replayed after restart.
 
 ## Permissions
 
@@ -50,7 +50,7 @@ Permissions control Hext's tools, rather than the behavior of a separate applica
 - **Windows media / Spotify:** basic Spotify playback can use an identified native Spotify session without a Web API connection. Named-track search and API-specific operations use official Spotify OAuth/PKCE. If a native session is missing, the conversation can open Spotify and check for it, or guide official API setup while retaining the request. This does not install Spotify. Platform-required Client ID, account consent, Premium/API access, and active-device requirements cannot be invented or bypassed. Spotify catalog results stay local and never enter provider context or preference memory.
 - **Saved history and memory:** existing bounded history search, reviewed shared preferences, language, and provider selection remain intact. Task planning retrieves preferences against the original goal rather than external tool text.
 
-Unknown resources are reported unavailable. Hext does not download an executable, install an unknown component, or fabricate a connection because the model suggested one. Additional APIs and application-specific UI automation require a reviewed native adapter. This release is not a universal Windows UI automation system.
+Unknown resources are reported honestly. General research, isolated scripts, authorized UI controls and reviewed WinGet proposals can prepare a solution without a dedicated service adapter. Hext does not fabricate a connection or execute an arbitrary download. Additional specialized APIs still require reviewed adapters; see [general tools and limits](agent.md).
 
 ## Skills without executable plugins
 
@@ -74,4 +74,4 @@ Use owned service objects with a lifetime covering their callbacks. Credentials 
 
 The [MCP tools specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) informed the catalog/schema separation. Hext does not currently load arbitrary MCP servers. The provider's own MCP/apps/shell integrations remain disabled; future transports must pass through the host's permission and credential boundaries.
 
-See [Assistant setup](assistant.md), [development checks](development.md), and [0.9.0 verification](verification-0.9.0.md).
+See [Assistant setup](assistant.md), [development checks](development.md), and [0.10.0 verification](verification-0.10.0.md).

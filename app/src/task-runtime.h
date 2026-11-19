@@ -24,6 +24,10 @@ hext::Json personalCapabilityState(const std::string& id){
     if(definition){result["title"]=hext::utf8(definition->title);result["description"]=definition->description;result["permission"]=static_cast<int>(personal.preferences.grants[static_cast<int>(definition->category)]);auto grant=personal.preferences.serviceGrants.find(id);if(grant!=personal.preferences.serviceGrants.end())result["service_permission"]=static_cast<int>(grant->second);}
     auto native=personal.adapters.find(id);if(native!=personal.adapters.end()&&native->second.inspect){try{auto status=native->second.inspect();if(status.is_object()){result["ready"]=status.value("ready",false);result["state"]=status.value("state","configuration");result["status"]=status.value("status","Preparação necessária");result["details"]=status.value("details","Configuração oficial deste recurso.");}else throw std::runtime_error("Invalid adapter status");}catch(...){result["ready"]=false;result["state"]="error";result["status"]="Não foi possível consultar este recurso.";}return result;}
     if(id=="provider")return {{"id",id},{"available",true},{"ready",assistantConfigured()&&(assistantProvider==1||assistantProvider==2)},{"state",assistantConfigured()?"ready":"configuration"},{"status",hext::utf8(assistantConnectionMessage())}};
+    if(id=="desktop"){result["status"]=std::to_string(personal.windowScopes.size())+" janelas autorizadas nesta conversa";return result;}
+    if(id=="terminal"){result["status"]="Terminal isolado · sem rede";return result;}
+    if(id=="web"){result["ready"]=std::filesystem::exists(hext::systemExecutable(L"curl.exe"));result["status"]=result["ready"]==true?"Pesquisa e texto HTTPS públicos":"curl do Windows indisponível";return result;}
+    if(id=="packages"){wchar_t local[32768]{};GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);result["ready"]=personal.packagesVerified||std::filesystem::exists(std::filesystem::path(local)/L"Microsoft/WindowsApps/winget.exe");result["state"]=result["ready"]==true?"ready":"configuration";result["status"]=result["ready"]==true?"App Installer disponível · validação antes do uso":"Instale o App Installer oficial";return result;}
     if(!definition){result["state"]="unsupported";result["status"]="Capacidade não instalada";return result;}
     if(id=="spotify"){
         auto state=personal.spotify.snapshot();result["ready"]=state.connected||personal.nativeSpotifyReady;result["status"]=personal.nativeSpotifyReady&&!state.connected?"Player Spotify verificado no Windows":hext::utf8(state.status);result["routes"]={{"windows_player",personal.nativeSpotifyReady?"verified":"inspect_on_demand"},{"web_api",state.connected?"connected":"requires_setup"}};
@@ -37,6 +41,8 @@ hext::Json personalCapabilityState(const std::string& id){
 }
 hext::Json personalCapabilitiesContext(){hext::Json result=hext::Json::array();for(auto& definition:hext::capabilityDefinitions())result.push_back(personalCapabilityState(definition.id));return result;}
 bool personalRequireSetup(const hext::ActionRequest& request){
+    if(personalAgentSetup(request))return true;
+    if(request.name.rfind("packages.",0)==0&&!personalCapabilityState("packages").value("ready",false)){personal.task.suspend(request,"packages");personal.capability="packages";personal.requestActive=true;personalShow(PersonalView::Setup);return true;}
     auto definition=hext::toolRegistry().find(request.name);
     if(definition&&personal.adapters.count(definition->capability)&&!personalCapabilityState(definition->capability).value("ready",false)){personal.task.suspend(request,definition->capability);personal.capability=definition->capability;personal.requestActive=true;personalShow(PersonalView::Setup);return true;}
     if(request.name=="capabilities.connect"){
@@ -78,7 +84,11 @@ void personalPrepare(){
     else if(id=="provider"){
         if(!assistantProvider||assistantProvider==3){assistantProvider=1;detectAssistant(1);}
         if(connectionState[assistantProvider]==hext::ConnectionState::NeedsLogin)loginAssistant();else connectAssistant();
-    }else personal.notice=L"Este recurso não exige uma conexão externa.";
+    }else if(id=="packages"){
+        ShellExecuteW(windowHandle,L"open",L"ms-windows-store://pdp/?productid=9NBLGGH4NNS1",nullptr,nullptr,SW_SHOWNORMAL);
+        if(personal.task.stage==hext::TaskStage::Setup){personal.preparing=true;personal.nativePrepareUntil=GetTickCount64()+180000;personal.nativeRetryAt=0;}
+    }
+    else personal.notice=L"Este recurso não exige uma conexão externa.";
     invalidate(180);
 }
 bool personalResourceAction(const hext::ActionRequest& request){
@@ -138,6 +148,7 @@ void personalImportSkill(){
     personal.skillDraft=*recipe;personalShow(PersonalView::SkillReview);
 }
 void personalTaskAction(int id){
+    if(id>=3400){personalAgentUIAction(id);return;}
     if(id>=3300&&id<3304){auto index=personal.capabilityPage*4+id-3300;if(index<static_cast<int>(hext::capabilityDefinitions().size())){personal.capability=hext::capabilityDefinitions()[index].id;personal.capabilityPermissions=false;personal.spotifyPage=0;personalShow(PersonalView::Capability);}}
     else if(id==3304)personal.capabilityPage=std::max(0,personal.capabilityPage-1);
     else if(id==3305)personal.capabilityPage=std::min(static_cast<int>((hext::capabilityDefinitions().size()-1)/4),personal.capabilityPage+1);

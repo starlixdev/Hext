@@ -38,6 +38,9 @@
 #include "personal-media.h"
 #include "task-engine.h"
 #include "native-resources.h"
+#include "agent-web.h"
+#include "agent-desktop.h"
+#include "agent-packages.h"
 #include "hardware.h"
 #include "navigation.h"
 #include "sound.h"
@@ -1407,7 +1410,7 @@ LRESULT CALLBACK procedure(HWND wnd,UINT message,WPARAM wp,LPARAM lp){
     }
     case WM_CLOSE:DestroyWindow(wnd);return 0;
     case WM_DESTROY:
-        personalRevoke();personal.spotify.cancel();if(personal.saved)personalSaveChat();
+        personalPauseTask();personalRevoke();personal.spotify.cancel();if(personal.saved)personalSaveChat();
         cancelShortcutCapture();shortcuts.releaseAll();
         hardwareMonitor.stop();
         assistantBridge.cancel();
@@ -1987,12 +1990,18 @@ int recordMotion(const std::filesystem::path& directory){
     return valid?0:1;
 }
 #include "personal-verification.h"
+#include "agent-verification.h"
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
+    int workerArgumentCount=0;auto workerArguments=CommandLineToArgvW(GetCommandLineW(),&workerArgumentCount);
+    bool desktopWorker=workerArguments&&workerArgumentCount==2&&std::wstring(workerArguments[1])==L"--agent-desktop-worker";
+    if(workerArguments)LocalFree(workerArguments);
+    if(desktopWorker)return hext::agentDesktopWorker();
     bool personalCheck=std::wstring(arguments).find(L"--verify-personal")!=std::wstring::npos;
+    bool agentCheck=std::wstring(arguments).find(L"--verify-agent")!=std::wstring::npos;
     bool recording=std::wstring(arguments).find(L"--record-motion")!=std::wstring::npos;
     bool connectionCheck=std::wstring(arguments).find(L"--verify-connection")!=std::wstring::npos;
     bool hardwareCheck=std::wstring(arguments).find(L"--verify-hardware")!=std::wstring::npos;
-    testMode=personalCheck||recording||connectionCheck||hardwareCheck||std::wstring(arguments).find(L"--verify-render")!=std::wstring::npos;
+    testMode=personalCheck||agentCheck||recording||connectionCheck||hardwareCheck||std::wstring(arguments).find(L"--verify-render")!=std::wstring::npos;
     HANDLE single=testMode?nullptr:CreateMutex(nullptr,FALSE,L"Local\\HextIsland");
     if(!testMode&&GetLastError()==ERROR_ALREADY_EXISTS){
         MessageBox(nullptr,L"O Hext já está aberto. Passe o mouse no centro superior da área de trabalho.",L"Hext",MB_OK);
@@ -2058,7 +2067,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     }
     accessibleUI=new HextAccessible;
     if(testMode){
-        int result=personalCheck?verifyPersonal(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos,std::wstring(arguments).find(L"native")!=std::wstring::npos):
+        int result=agentCheck?verifyAgent(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos):personalCheck?verifyPersonal(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos,std::wstring(arguments).find(L"native")!=std::wstring::npos):
             hardwareCheck?verifyHardware(std::filesystem::path(configPath).parent_path()):
             connectionCheck?verifyAssistantConnection(std::filesystem::path(configPath).parent_path()):
             recording?recordMotion(std::filesystem::path(configPath).parent_path()):

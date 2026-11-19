@@ -1,5 +1,5 @@
 #pragma once
-enum class PersonalView {None,Chats,NewChat,Memory,Assets,Editor,Action,Remember,Delete,Capabilities,Capability,Setup,SkillReview};
+enum class PersonalView {None,Chats,NewChat,Memory,Assets,Editor,Action,Remember,Delete,Capabilities,Capability,Setup,SkillReview,Tasks,WindowConsent,Intervention,OperationReview};
 struct NativeCapabilityAdapter {
     std::function<hext::Json()> inspect;
     std::function<bool(const hext::ActionRequest&)> execute;
@@ -16,6 +16,14 @@ struct PersonalState {
     hext::ApplicationDiscovery applications;
     hext::SkillRegistry skills;
     hext::TaskSession task;
+    hext::AgentWorker agent;
+    bool agentOwned=false,preserveCheckpoint=false,checkpointFailed=false,packagesVerified=false;
+    ULONGLONG lastCheckpoint=0;
+    std::string checkpointDigest,pendingWindow,selectedTask;
+    std::map<std::string,hext::Json> windows,snapshots,proposals;
+    std::set<std::string> windowScopes;
+    hext::Json agentResult=nullptr;
+    int reviewPage=0;
     std::map<std::string,NativeCapabilityAdapter> adapters;
     std::map<std::string,hext::Json> resources;
     std::optional<hext::ActionRequest> inFlight;
@@ -66,4 +74,14 @@ void startTimer();
 void personalCloseView();
 void personalChangePage();
 void personalRevoke();
-bool personalBusy(){return assistantBridge.busy||personal.requestActive||personal.spotifyOwned||personal.mediaOwned||personal.applicationsOwned;}
+bool personalAgentAction(const hext::ActionRequest&);
+bool personalAgentSetup(const hext::ActionRequest&);
+void personalAgentPoll();
+bool personalCheckpoint();
+void personalPauseTask();
+void personalAgentUIAction(int);
+void personalAgentCleanup();
+bool personalDeleteAgentWorkspaces();
+std::wstring personalAgentLabel(const hext::ActionRequest&);
+std::wstring personalOperationDetails();
+bool personalBusy(){return assistantBridge.busy||personal.requestActive||personal.spotifyOwned||personal.mediaOwned||personal.applicationsOwned||personal.agentOwned;}

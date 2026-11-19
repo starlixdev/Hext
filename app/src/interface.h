@@ -174,6 +174,7 @@ void drawToggle(int,bool,float,float,float,float,bool);
 void drawHome(){
     if(personal.view!=PersonalView::None){drawPersonalOverlay();return;}
     text(L"Assistant",204,87,380,21,0xF5F5F8,true);
+    iconButton(3420,0xE823,L"Tarefas pendentes",550,87,30,30);
     iconButton(3070,0xE81C,L"Conversas salvas",592,87,30,30);
     if(!personalBusy())iconButton(452,0xE710,L"Nova conversa",634,87,30,30);
     iconButton(461,0xE713,L"Configurar assistente",676,87,30,30);
@@ -204,8 +205,9 @@ void drawHome(){
     }
     drawAssistantInput();
     drawSendButton();
-    text(assistantStatus,212,433,personal.task.active()&&personal.task.stage==hext::TaskStage::Setup?292:492,12,0xB7B7C1);
+    text(assistantStatus,212,433,personal.task.active()?personal.task.stage==hext::TaskStage::Setup?292:390:492,12,0xB7B7C1);
     if(personal.task.active()&&personal.task.stage==hext::TaskStage::Setup)button(3315,L"Continuar configuração",516,429,196,30,true);
+    else if(personal.task.active()){button(3423,L"Pausar",624,429,88,30);}
 }
 void drawTimer(){
     text(L"Temporizador",204,87,500,21,0xF5F5F8,true);
