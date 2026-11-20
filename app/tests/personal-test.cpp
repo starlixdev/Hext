@@ -19,18 +19,12 @@ int main(int argc,char** argv){
     auto ticket=gate.propose(prefs,*volume,"chat-a");assert(!gate.consume(ticket.nonce,prefs,"chat-b"));
     ticket=gate.propose(prefs,*volume,"chat-a");prefs.revision++;assert(!gate.consume(ticket.nonce,prefs,"chat-a"));
     ticket=gate.propose(prefs,*volume,"chat-a");assert(gate.consume(ticket.nonce,prefs,"chat-a"));assert(!gate.consume(ticket.nonce,prefs,"chat-a"));
-    for(auto level:{Autonomy::Chat,Autonomy::Ask,Autonomy::Allowed})for(auto grant:{Grant::Deny,Grant::Ask,Grant::Allow}){
-        prefs.autonomy=level;prefs.grants.fill(grant);auto decision=gate.evaluate(prefs,*volume);
-        assert(decision==(level==Autonomy::Chat||grant==Grant::Deny?Decision::Denied:level==Autonomy::Ask||grant==Grant::Ask?Decision::Confirm:Decision::Execute));
-    }
-    prefs.autonomy=Autonomy::Allowed;prefs.grants.fill(Grant::Allow);
-    for(int category=0;category<static_cast<int>(Category::Count);category++){
-        ActionRequest candidate=*volume;candidate.category=static_cast<Category>(category);prefs.grants[category]=Grant::Deny;assert(gate.evaluate(prefs,candidate)==Decision::Denied);prefs.grants[category]=Grant::Allow;assert(gate.evaluate(prefs,candidate)==Decision::Execute);
-    }
-    assert(utf8Excerpt("a\xC3\xA7" "b",2,2)=="b");assert(utf8Excerpt("a\xC3\xA7" "b",0,2)=="a");
+    for(auto mode:{PermissionMode::Ask,PermissionMode::Delegate,PermissionMode::Always}){prefs.mode=mode;assert(gate.evaluate(prefs,*volume)==(mode==PermissionMode::Ask?Decision::Confirm:mode==PermissionMode::Delegate?Decision::Review:Decision::Execute));}
+    prefs.mode=PermissionMode::Delegate;ticket=gate.propose(prefs,*volume,"chat-a",ExecutionAuthority::Reviewer);assert(gate.consumeReview(ticket.nonce,prefs,"chat-a"));assert(gate.authorizeExecution(prefs,*volume,"chat-a",ExecutionAuthority::Reviewer));assert(!gate.authorizeExecution(prefs,*volume,"chat-a",ExecutionAuthority::Reviewer));
+    prefs.mode=PermissionMode::Always;    assert(utf8Excerpt("a\xC3\xA7" "b",2,2)=="b");assert(utf8Excerpt("a\xC3\xA7" "b",0,2)=="a");
     auto voice=actionRequest(Json{{"name","spotify.pause"},{"arguments",Json::object()}});assert(voice);voice->origin=ActionOrigin::Voice;assert(gate.evaluate(prefs,*voice)==Decision::Denied);
     auto loud=actionRequest(Json{{"name","audio.set_volume"},{"arguments",{{"percent",100}}}});assert(loud&&gate.evaluate(prefs,*loud)==Decision::Confirm);
-    ticket=gate.propose(prefs,*volume,"chat-a");prefs.grants[0]=Grant::Deny;assert(!gate.consume(ticket.nonce,prefs,"chat-a"));
+    ticket=gate.propose(prefs,*volume,"chat-a");prefs.blocked=true;assert(!gate.consume(ticket.nonce,prefs,"chat-a"));
     assert(pkceChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")=="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
     assert(oauthCode("GET /callback?code=abc%2B123&state=expected HTTP/1.1\r\n\r\n","expected")=="abc+123");
     for(auto request:{"GET /callback?code=abc&state=wrong HTTP/1.1","GET /callback?code=abc&state=expected&state=wrong HTTP/1.1","GET /callback?code=%GG&state=expected HTTP/1.1","GET /callback?error=access_denied&state=expected HTTP/1.1"})assert(!oauthCode(request,"expected"));
@@ -52,7 +46,7 @@ int main(int argc,char** argv){
     }
     {
         PersonalStore reopened;reopened.open(root);assert(reopened.get("chat","a")["title"]=="Private-A-unique-3947");assert(reopened.get("chat","b")["messages"][0]["text"]=="chat b only");
-        AssistantPreferences restored;restored.restore(reopened.get("settings","assistant"));assert(restored.grants[0]==Grant::Deny&&restored.autonomy==Autonomy::Allowed);
+        AssistantPreferences restored;restored.restore(reopened.get("settings","assistant"));assert(restored.mode==PermissionMode::Always);
         auto row=reopened.get("chat","a");row["title"]="Renamed";reopened.put("chat","a",row);assert(reopened.get("chat","a")["title"]=="Renamed");
         reopened.erase("chat","a");assert(reopened.get("chat","a").is_null()&&reopened.get("chat","b").is_object());
         SpotifyService spotify(reopened);spotify.initialize();assert(!spotify.snapshot().credentials);assert(spotify.command("verify"));

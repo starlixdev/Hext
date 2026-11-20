@@ -1,6 +1,6 @@
 # Personal assistant
 
-Open **Personalizar → Assistant**. The five tabs manage the provider, actions, memory, local data, and a general **Capacidades** resource list. Services do not require separate main tabs. Responses support automatic language selection, Brazilian Portuguese, and English. This changes assistant responses; the application interface remains Portuguese. See [Tasks and capabilities](tasks.md) for planning, on-demand preparation, and extension points.
+Open **Personalizar → Assistant**. Four tabs manage the provider, permissions, memory, and local data. Capability/tool lists are internal; needed configuration appears inside the conversation. Responses support automatic language selection, Brazilian Portuguese, and English. This changes assistant responses; the application interface remains Portuguese. See [Tasks and capabilities](tasks.md) for planning, on-demand preparation, and extension points.
 
 ## Connect a provider
 
@@ -18,15 +18,21 @@ The model returns a typed JSON envelope generated from Hext's tool registry. Hex
 
 | Mode | Behavior |
 | --- | --- |
-| Conversar | All assistant-requested actions are blocked. |
-| Pedir autorização | Each allowed category requires a concrete one-time approval. |
-| Ações permitidas | Categories marked Permitir can execute directly; Perguntar still requires approval. |
+| Sempre Perguntar | Ask before computer actions. Each approved request is exact and one-use. |
+| Aprovar por mim | A separate restricted AI review evaluates the original goal and exact native action. Safe, appropriate actions can execute automatically; meaningful uncertainty asks you. A refusal stops the task. |
+| Permitir Sempre | Routine actions execute automatically within existing native scopes and boundaries. |
 
-**Negar** always blocks a category. Switching output devices and setting volume above 80% always requires confirmation. Approvals expire after two minutes and are bound to the exact request, conversation, and permission revision. Changing permissions, switching conversations, disconnecting, and canceling invalidate pending work. Failure stops the remaining action batch. Cancellation cannot undo an external operation already accepted by Windows or Spotify.
+There are no category, service, or tool overrides. Existing settings migrate conservatively to **Sempre Perguntar**, preserving chats, memory, language, and connections. AI review uses the selected authenticated Codex/Claude adapter, consumes provider usage, and can add latency. Missing authentication, timeout, malformed review, or failed review falls back to your approval; it never silently allows an action. Cached internal metadata inspection has no computer effect and needs no dialog.
 
-Supported actions include native Windows volume/mute/default output, audio device discovery, Hext timers, default-browser searches, opening authorized applications/documents/folders, Windows media controls, Spotify controls, and optional saved-history search. History access defaults to denied. Manual controls explicitly clicked in the application remain available independently of the assistant's grants.
+Native protections remain in every mode: installations, historical-chat disclosure, recognized sensitive content, known destructive scripts, critical/financial UI, unknown UI invocations, and volume above 80% require explicit consent. Unsupported deletion/administration tools remain unsupported. Ordinary volume, device switching, timers, bounded text operations, and scoped benign UI follow the global mode. Authentication, file selection, Windows UAC, service consent and scope checks cannot be bypassed. Privacy classification is conservative and incomplete; the modes are not a guarantee that every downstream consequence can be inferred.
 
-Authorize individual executables, documents, or folders under **Dados → Itens autorizados**, or through a task's native chooser. Hext can discover installed desktop applications without authorizing their launch; a new target still requires explicit approval. It exposes opaque IDs and display names to the model, not arbitrary command lines. Executables must retain their registered modification timestamp and canonical path; changed programs require authorization again. Scripts, shortcuts, remote paths, and unlisted document extensions cannot be registered. This is a launch permission, not a sandbox for the application or document viewer you choose to trust. Text reads, bounded folder listing, and new non-overwriting `.txt`/`.md` creation are available with separate confirmation. Hext does not expose file deletion, installation, administration, or arbitrary shell actions.
+Approvals expire after two minutes and bind the exact request, conversation, and permission revision. Human and AI tickets are distinct and consumed once at native dispatch; the model cannot mint either. Changing modes, switching conversations, disconnecting, and canceling invalidate pending work. Failure stops the remaining action batch. Cancellation cannot undo an external operation already accepted by Windows or Spotify.
+
+Supported actions include native Windows volume/mute/default output, audio device discovery, Hext timers, default-browser searches, opening scoped applications/documents/folders, Windows media controls, Spotify controls, and explicitly approved saved-history search. Manual controls clicked in the application remain available independently of the assistant's selected mode.
+
+Tasks use native choosers for personal files/folders and can discover installed desktop applications as opaque IDs. Routine launches follow the global mode; obvious installers and critical system tools require consent. Canonical paths and modification timestamps are rechecked. Scripts, remote paths, and unlisted document extensions cannot be registered as files/apps. A launched application has its own capabilities; Hext does not sandbox that application. Scoped text reads, bounded folder listing, and new non-overwriting `.txt`/`.md` creation follow the global mode. General PowerShell remains AppContainer-isolated, and WinGet installations require a native reviewed proposal and user consent. See [agent boundaries](agent.md).
+
+Recognized sensitive tool output is held locally before entering provider context or a durable task result. A separate sharing approval releases that exact result without repeating the original operation. Declining discards it. This marker-based guard cannot recognize all private information.
 
 Browser searches open the default browser through Windows. A launch receipt confirms Windows accepted the request; it does not claim that the web page loaded or that Hext inspected its contents. Windows media controls use the current GSMTC player session; availability and supported commands depend on that player.
 
@@ -38,11 +44,11 @@ Memory is a separate collection of at most 200 short preferences. The assistant 
 
 Deleting or discarding a conversation removes its unpinned derived preferences. Manually pinned entries remain until explicitly deleted. Disabling memory omits it from subsequent provider context without deleting it. Common credential and sensitive-ID markers are rejected, but this filter is not a general sensitive-data detector. Review what you save.
 
-Searching previous saved chats requires the separate **Conversas anteriores** permission. It returns at most five matching excerpts within 4 KB and excludes the current conversation. Other histories are not automatically sent with a new chat.
+Searching previous saved chats always requires a concrete sharing approval. It returns at most five matching excerpts within 4 KB and excludes the current conversation. Other histories are not automatically sent with a new chat.
 
 ## Spotify
 
-Spotify is a resource under **Capacidades**, with setup also available directly from a task. Basic controls can use an identified Spotify Windows media session without API credentials. Catalog search and Web API playback are optional: create your own application in the [Spotify developer dashboard](https://developer.spotify.com/dashboard), register **http://127.0.0.1/callback**, and enter its public **Client ID** in Hext. No client secret is needed. The loopback callback uses a dynamically assigned port, random state, and PKCE S256. Hext requests `user-read-playback-state` and `user-modify-playback-state` only. Login and consent occur in your browser. The original pending task resumes after readiness and fresh permission checks.
+Spotify setup appears on demand in a task, with local disconnect controls. Basic controls can use an identified Spotify Windows media session without API credentials. Catalog search and Web API playback are optional: create your own application in the [Spotify developer dashboard](https://developer.spotify.com/dashboard), register **http://127.0.0.1/callback**, and enter its public **Client ID** in Hext. No client secret is needed. The loopback callback uses a dynamically assigned port, random state, and PKCE S256. Hext requests `user-read-playback-state` and `user-modify-playback-state` only. Login and consent occur in your browser. The original pending task resumes after readiness and fresh permission checks.
 
 Open Spotify on a device, connect in Hext, then search, choose a track, select a device, and use playback controls. Search returns up to five tracks. Device enumeration, transfer, pause/resume, previous/next, and volume requests use the official Web API. State is checked after play/pause/volume when available. A command-accepted result is distinguished from a confirmed state. Network failures, expired sessions, restricted devices, missing players, authorization failures, and rate limits are reported without a simulated success. Ambiguous failed writes are not retried automatically.
 
@@ -60,4 +66,4 @@ Messages and selected context are transmitted to your selected provider. CLI dia
 
 **Dados → Apagar dados do Assistant** removes local histories, memory, authorized items, connection data, and assistant preferences, and cancels pending requests. It preserves island appearance, audio, and keyboard settings and leaves global CLI sign-ins intact. SQLite secure deletion clears deleted record payloads, but this is not a guarantee of forensic removal from backups or storage hardware. Review any backups separately.
 
-See [0.9.0 validation](verification-0.9.0.md) for tested flows and remaining account-dependent verification.
+Ask the assistant to import a skill or disconnect a supported integration when needed; these use registered host tools and native review/configuration. Provider disconnect remains in Provedor. **Dados → Limpar ambientes** removes Hext's isolated script environments. See [0.11.0 validation](verification-0.11.0.md) for tested flows and remaining account-dependent verification.

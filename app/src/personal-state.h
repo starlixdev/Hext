@@ -1,5 +1,5 @@
 #pragma once
-enum class PersonalView {None,Chats,NewChat,Memory,Assets,Editor,Action,Remember,Delete,Capabilities,Capability,Setup,SkillReview,Tasks,WindowConsent,Intervention,OperationReview};
+enum class PersonalView {None,Chats,NewChat,Memory,Assets,Editor,Action,Remember,Delete,Connection,Setup,SkillReview,Tasks,WindowConsent,Intervention,OperationReview};
 struct NativeCapabilityAdapter {
     std::function<hext::Json()> inspect;
     std::function<bool(const hext::ActionRequest&)> execute;
@@ -17,6 +17,12 @@ struct PersonalState {
     hext::SkillRegistry skills;
     hext::TaskSession task;
     hext::AgentWorker agent;
+    hext::AssistantBridge reviewer;
+    std::optional<hext::ActionTicket> review;
+    std::filesystem::path reviewWork;
+    std::string reviewTask,reviewChat,reviewReason;
+    struct Disclosure {hext::ActionRequest request;bool success;std::wstring detail;hext::Json data;};
+    std::optional<Disclosure> disclosure;
     bool agentOwned=false,preserveCheckpoint=false,checkpointFailed=false,packagesVerified=false;
     ULONGLONG lastCheckpoint=0;
     std::string checkpointDigest,pendingWindow,selectedTask;
@@ -29,9 +35,8 @@ struct PersonalState {
     std::optional<hext::ActionRequest> inFlight;
     std::string capability="spotify",setupReason;
     hext::Json skillDraft=nullptr;
-    bool applicationsOwned=false,preparing=false,playSelection=false,capabilityPermissions=false;
+    bool applicationsOwned=false,preparing=false,playSelection=false;
     bool nativeSpotifyReady=false;ULONGLONG nativePrepareUntil=0,nativeRetryAt=0;
-    int capabilityPage=0,capabilityToolPage=0;
     hext::AssistantPreferences preferences;
     hext::ActionGate gate;
     PersonalView view=PersonalView::None,editorReturn=PersonalView::None;
@@ -49,7 +54,7 @@ struct PersonalState {
     Spring transition{1,0,1};
 };
 PersonalState personal;
-bool personalVerification=false,personalProviderVerification=false,personalNativeVerification=false;
+bool personalVerification=false,personalProviderVerification=false,personalNativeVerification=false,personalReviewerVerification=false;
 hext::Json personalCapabilityState(const std::string& id);
 hext::Json personalCapabilitiesContext();
 void personalPrepare();
@@ -84,4 +89,11 @@ void personalAgentCleanup();
 bool personalDeleteAgentWorkspaces();
 std::wstring personalAgentLabel(const hext::ActionRequest&);
 std::wstring personalOperationDetails();
-bool personalBusy(){return assistantBridge.busy||personal.requestActive||personal.spotifyOwned||personal.mediaOwned||personal.applicationsOwned||personal.agentOwned;}
+hext::ActionRequest personalRefineAction(const hext::ActionRequest&);
+void personalStartReview(const hext::ActionRequest&);
+void personalPollReview();
+void personalCancelReview();
+void personalRequestConsent(const hext::ActionRequest&);
+void personalExecute(const hext::ActionRequest&,hext::ExecutionAuthority authority=hext::ExecutionAuthority::None);
+void personalReceipt(const hext::ActionRequest&,bool,const std::wstring&,const hext::Json& data=nullptr,bool disclosureApproved=false);
+bool personalBusy(){return personal.reviewer.busy||assistantBridge.busy||personal.requestActive||personal.spotifyOwned||personal.mediaOwned||personal.applicationsOwned||personal.agentOwned;}

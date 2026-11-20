@@ -275,8 +275,6 @@ void hit(int id,float x,float y,float w,float h,const std::wstring& name=L""){
 UINT accentForeground(){return hext::foreground(accent());}
 bool controlEnabled(int id){
     if(id==3310)return personal.ready&&!personal.preparing&&!personal.spotify.busy()&&!(personal.capability=="provider"&&connectionState[assistantProvider]==hext::ConnectionState::Checking);
-    if(id==3304)return personal.capabilityPage>0;
-    if(id==3305)return personal.capabilityPage<static_cast<int>((hext::capabilityDefinitions().size()-1)/4);
     if(id==3063)return personal.ready&&personal.preferences.memory;
     if(id==3080||id==3081||id==3083||id==3084||(id>=3085&&id<=3088)||(id>=3140&&id<3145)||(id>=3150&&id<3154))return personal.ready&&!personal.spotify.busy()&&!testMode;
     if(id==3095)return personal.approval&&GetTickCount64()<=personal.approval->expires;
@@ -1991,6 +1989,7 @@ int recordMotion(const std::filesystem::path& directory){
 }
 #include "personal-verification.h"
 #include "agent-verification.h"
+#include "authorization-verification.h"
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     int workerArgumentCount=0;auto workerArguments=CommandLineToArgvW(GetCommandLineW(),&workerArgumentCount);
     bool desktopWorker=workerArguments&&workerArgumentCount==2&&std::wstring(workerArguments[1])==L"--agent-desktop-worker";
@@ -1998,10 +1997,11 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     if(desktopWorker)return hext::agentDesktopWorker();
     bool personalCheck=std::wstring(arguments).find(L"--verify-personal")!=std::wstring::npos;
     bool agentCheck=std::wstring(arguments).find(L"--verify-agent")!=std::wstring::npos;
+    bool authorizationCheck=std::wstring(arguments).find(L"--verify-permissions")!=std::wstring::npos;
     bool recording=std::wstring(arguments).find(L"--record-motion")!=std::wstring::npos;
     bool connectionCheck=std::wstring(arguments).find(L"--verify-connection")!=std::wstring::npos;
     bool hardwareCheck=std::wstring(arguments).find(L"--verify-hardware")!=std::wstring::npos;
-    testMode=personalCheck||agentCheck||recording||connectionCheck||hardwareCheck||std::wstring(arguments).find(L"--verify-render")!=std::wstring::npos;
+    testMode=personalCheck||agentCheck||authorizationCheck||recording||connectionCheck||hardwareCheck||std::wstring(arguments).find(L"--verify-render")!=std::wstring::npos;
     HANDLE single=testMode?nullptr:CreateMutex(nullptr,FALSE,L"Local\\HextIsland");
     if(!testMode&&GetLastError()==ERROR_ALREADY_EXISTS){
         MessageBox(nullptr,L"O Hext já está aberto. Passe o mouse no centro superior da área de trabalho.",L"Hext",MB_OK);
@@ -2067,7 +2067,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     }
     accessibleUI=new HextAccessible;
     if(testMode){
-        int result=agentCheck?verifyAgent(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos):personalCheck?verifyPersonal(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos,std::wstring(arguments).find(L"native")!=std::wstring::npos):
+        int result=authorizationCheck?verifyAuthorization(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos):agentCheck?verifyAgent(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos):personalCheck?verifyPersonal(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos,std::wstring(arguments).find(L"native")!=std::wstring::npos):
             hardwareCheck?verifyHardware(std::filesystem::path(configPath).parent_path()):
             connectionCheck?verifyAssistantConnection(std::filesystem::path(configPath).parent_path()):
             recording?recordMotion(std::filesystem::path(configPath).parent_path()):

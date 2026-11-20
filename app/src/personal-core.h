@@ -143,57 +143,30 @@ public:
         return sqlite3_column_int(q.p,0);
     }
 };
-enum class Autonomy {Chat,Ask,Allowed};
-enum class Grant {Deny,Ask,Allow};
+enum class PermissionMode {Ask,Delegate,Always};
+
 enum class Category {Audio,Timers,Browser,Apps,Files,Media,Spotify,History,Desktop,Terminal,Web,Packages,Count};
 inline constexpr const char* CategoryKeys[]={"audio","timers","browser","apps","files","media","spotify","history","desktop","terminal","web","packages"};
 inline const wchar_t* categoryName(Category c){const wchar_t* names[]={L"Áudio do Windows",L"Temporizadores",L"Navegador",L"Aplicativos",L"Arquivos e pastas",L"Mídia do Windows",L"Spotify",L"Conversas anteriores",L"Janelas e aplicativos",L"Terminal isolado",L"Pesquisa e páginas web",L"Instalar aplicativos"};return names[static_cast<int>(c)];}
 struct AssistantPreferences {
-    Autonomy autonomy=Autonomy::Ask;std::array<Grant,static_cast<int>(Category::Count)> grants{};
-    bool memory=true;std::string language="auto",searchEngine="https://www.google.com/search?q=";unsigned revision=1;
-    std::map<std::string,Grant> serviceGrants,toolGrants;
-    AssistantPreferences(){grants.fill(Grant::Ask);grants[static_cast<int>(Category::History)]=Grant::Deny;}
-    Json json()const{Json out={{"autonomy",static_cast<int>(autonomy)},{"memory",memory},{"language",language},{"grants",Json::array()},{"services",Json::object()},{"tools",Json::object()}};for(auto g:grants)out["grants"].push_back(static_cast<int>(g));for(auto& g:serviceGrants)out["services"][g.first]=static_cast<int>(g.second);for(auto& g:toolGrants)out["tools"][g.first]=static_cast<int>(g.second);return out;}
-    void restore(const Json& j){if(!j.is_object())return; for(auto field:{"services","tools"})if(j.contains(field)&&j[field].is_object())for(auto it=j[field].begin();it!=j[field].end();++it)if(it.key().size()<=64&&it.value().is_number_integer()){int grant=it.value().get<int>();if(grant>=0&&grant<=2)(std::string(field)=="services"?serviceGrants:toolGrants)[it.key()]=static_cast<Grant>(grant);}if(intField(j,"autonomy",0,2))autonomy=static_cast<Autonomy>(j["autonomy"].get<int>());if(j.contains("memory")&&j["memory"].is_boolean())memory=j["memory"].get<bool>();if(j.contains("language")&&j["language"].is_string()){auto l=j["language"].get<std::string>();if(l=="auto"||l=="pt-BR"||l=="en")language=l;}if(j.contains("grants")&&j["grants"].is_array()&&j["grants"].size()<=grants.size())for(size_t i=0;i<j["grants"].size();i++)if(j["grants"][i].is_number_integer()){int v=j["grants"][i].get<int>();if(v>=0&&v<=2)grants[i]=static_cast<Grant>(v);}}
+    PermissionMode mode=PermissionMode::Ask;
+    bool memory=true,blocked=false;std::string language="auto",searchEngine="https://www.google.com/search?q=";unsigned revision=1;
+    Json json()const{return {{"authorization_version",2},{"permission_mode",static_cast<int>(mode)},{"memory",memory},{"language",language}};}
+    void restore(const Json& value){
+        if(!value.is_object())return;
+        // Existing granular settings migrate conservatively; only a new explicit mode can enable automatic authorization.
+        mode=PermissionMode::Ask;
+        if(value.value("authorization_version",0)==2&&intField(value,"permission_mode",0,2))mode=static_cast<PermissionMode>(value["permission_mode"].get<int>());
+        if(value.contains("memory")&&value["memory"].is_boolean())memory=value["memory"];
+        if(value.contains("language")&&value["language"].is_string()){auto chosen=value["language"].get<std::string>();if(chosen=="auto"||chosen=="pt-BR"||chosen=="en")language=chosen;}
+    }
 };
 enum class ActionOrigin {Text,Voice};
 struct ActionRequest {std::string name;Json args;Category category=Category::Audio;bool sensitive=false;ActionOrigin origin=ActionOrigin::Text;std::string nativeTarget;};
 #include "capability-registry.h"
 inline std::optional<ActionRequest> actionRequest(const Json& value){return toolRegistry().validate(value);}
 
-enum class Decision {Denied,Confirm,Execute};
-struct ActionTicket {std::string nonce,chat;ActionRequest request;unsigned revision=0;ULONGLONG expires=0;};
-class ActionGate {
-    std::optional<ActionTicket> pending;
-public:
-    Decision evaluate(const AssistantPreferences& p,const ActionRequest& r)const{
-        if(!r.nativeTarget.empty()){
-            if(r.nativeTarget!="spotify"||r.name!="media.control"||!textField(r.args,"operation",16))return Decision::Denied;
-            auto original=r;original.nativeTarget.clear();auto operation=r.args["operation"].get<std::string>();if(operation=="play")operation="resume";
-            auto target=actionRequest(Json{{"name","spotify."+operation},{"arguments",Json::object()}});if(!target)return Decision::Denied;target->origin=r.origin;
-            auto first=evaluate(p,original),second=evaluate(p,*target);return first==Decision::Denied||second==Decision::Denied?Decision::Denied:first==Decision::Confirm||second==Decision::Confirm?Decision::Confirm:Decision::Execute;
-        }
-        if(static_cast<int>(r.category)<0||r.category>=Category::Count)return Decision::Denied;
-        if(r.category==Category::Spotify&&r.origin==ActionOrigin::Voice)return Decision::Denied;
-        auto definition=toolRegistry().find(r.name);auto grant=p.grants[static_cast<int>(r.category)];
-        auto resource=definition?definition->capability:std::string();if((r.name=="capabilities.connect"||r.name=="capabilities.inspect")&&textField(r.args,"id",64))resource=r.args["id"];
-        auto service=p.serviceGrants.find(resource);auto tool=p.toolGrants.find(r.name);
-        if(grant==Grant::Deny||(service!=p.serviceGrants.end()&&service->second==Grant::Deny)||(tool!=p.toolGrants.end()&&tool->second==Grant::Deny))return Decision::Denied;
-        if(definition&&definition->metadata)return Decision::Execute;
-        if(p.autonomy==Autonomy::Chat)return Decision::Denied;
-        if(service!=p.serviceGrants.end())grant=service->second;
-        if(tool!=p.toolGrants.end())grant=tool->second;
-        return p.autonomy==Autonomy::Ask||grant==Grant::Ask||r.sensitive?Decision::Confirm:Decision::Execute;
-    }
-    ActionTicket propose(const AssistantPreferences& p,const ActionRequest& r,const std::string& chat){pending=ActionTicket{randomID(),chat,r,p.revision,GetTickCount64()+120000};return *pending;}
-    std::optional<ActionRequest> consume(const std::string& nonce,const AssistantPreferences& p,const std::string& chat){
-        if(!pending)return {};
-        auto ticket=*pending;pending.reset();
-        if(ticket.nonce!=nonce||ticket.chat!=chat||ticket.revision!=p.revision||GetTickCount64()>ticket.expires||evaluate(p,ticket.request)==Decision::Denied)return {};
-        return ticket.request;
-    }
-    void revoke(){pending.reset();}
-};
+#include "authorization-policy.h"
 inline bool privateMemory(const std::string& key,const std::string& value){
     if(key.empty()||key.size()>64||value.empty()||value.size()>512)return false;
     auto s=lower(key+" "+value);

@@ -59,6 +59,7 @@ bool personalAgentSetup(const hext::ActionRequest& request){
     auto id=request.args.value("window","");auto found=personal.windows.find(id);
     if(found==personal.windows.end()||!hext::validAgentWindow(found->second))return false; // Executor reports a recoverable stale ID.
     if(personal.windowScopes.count(id))return false;
+    if(personal.preferences.mode!=hext::PermissionMode::Ask&&!hext::protectedUIContext(found->second.value("title","")))return false;
     personal.pendingWindow=id;personal.task.suspend(request,"desktop");personal.capability="desktop";personal.requestActive=true;personalShow(PersonalView::WindowConsent);return true;
 }
 bool personalAgentAction(const hext::ActionRequest& request){
@@ -71,11 +72,12 @@ bool personalAgentAction(const hext::ActionRequest& request){
     }
     if(name=="computer.windows"){
         auto rows=hext::agentWindows();J output=J::array();for(auto it=personal.windows.begin();it!=personal.windows.end();)if(!personal.windowScopes.count(it->first))it=personal.windows.erase(it);else ++it;
-        for(auto& row:rows){auto id=row["id"].get<std::string>();personal.windows[id]=row;output.push_back({{"id",id},{"title",row["title"]},{"application",row["application"]}});}personalReceipt(request,true,L"Janelas disponíveis consultadas. A leitura dos controles exige autorização individual.",output);return true;
+        for(auto& row:rows){auto id=row["id"].get<std::string>();personal.windows[id]=row;output.push_back({{"id",id},{"title",row["title"]},{"application",row["application"]}});}personalReceipt(request,true,L"Janelas disponíveis consultadas. As próximas ações seguem o modo de permissão escolhido.",output);return true;
     }
     J desktop=nullptr;std::filesystem::path executable=personalExecutable();
     if(name.rfind("computer.",0)==0){
-        auto id=args.value("window","");auto window=personal.windows.find(id);if(window==personal.windows.end()||!personal.windowScopes.count(id)||!hext::validAgentWindow(window->second)){personalReceipt(request,false,L"Janela não autorizada, alterada ou encerrada. Consulte as janelas novamente.",J{{"recoverable",true}});return true;}
+        auto id=args.value("window","");auto window=personal.windows.find(id);if(window!=personal.windows.end()&&!personal.windowScopes.count(id)&&personal.preferences.mode!=hext::PermissionMode::Ask&&!hext::protectedUIContext(window->second.value("title","")))personal.windowScopes.insert(id);
+        if(window==personal.windows.end()||!personal.windowScopes.count(id)||!hext::validAgentWindow(window->second)){personalReceipt(request,false,L"Janela não autorizada, alterada ou encerrada. Consulte as janelas novamente.",J{{"recoverable",true}});return true;}
         desktop={{"binding",window->second},{"operation","inspect"}};
         if(name=="computer.act"){
             auto snapshot=personal.snapshots.find(args.value("snapshot",""));
@@ -130,7 +132,7 @@ void personalAgentPoll(){
             bool recoverable=!success&&result.value("recoverable",false)&&!result.value("uncertain",false);
             if(personal.view==PersonalView::Intervention)personal.view=PersonalView::None;
             personalReceipt(request,success,success?request.name=="computer.act"&&!result.value("verified",false)?L"A interface aceitou a ação. O resultado final ainda precisa ser observado.":L"Etapa nativa concluída; resultado disponível para verificação.":hext::wide(result.value("error","A etapa falhou. Consulte o resultado antes de tentar outra abordagem.")),result);
-            if(recoverable&&personal.task.managed&&personal.preferences.autonomy!=hext::Autonomy::Chat){personal.task.stage=hext::TaskStage::Executing;personal.followUp=true;}
+            if(recoverable&&personal.task.managed&&!personal.preferences.blocked){personal.task.stage=hext::TaskStage::Executing;personal.followUp=true;}
             personalNext();
         }
     }
@@ -144,8 +146,7 @@ std::wstring personalOperationDetails(){
     return text;
 }
 void personalAgentUIAction(int id){
-    if(id>=3408&&id<3412){int category=id-3400;if(category<static_cast<int>(hext::Category::Count)){personalRevoke();auto& grant=personal.preferences.grants[category];grant=static_cast<hext::Grant>((static_cast<int>(grant)+1)%3);personalSavePreferences();}}
-    else if(id==3420){personal.rows=personal.store.list("task",20);personalShow(PersonalView::Tasks);}
+    if(id==3420){personal.rows=personal.store.list("task",20);personalShow(PersonalView::Tasks);}
     else if(id>=3430&&id<3434){int index=personal.listPage*4+id-3430;if(index<static_cast<int>(personal.rows.size()))personalRestoreTask(personal.rows[index].value("id",""));}
     else if(id==3423){personalPauseTask();personalRevoke();personal.view=PersonalView::None;assistantStatus=L"Tarefa pausada. Você pode retomá-la em Tarefas pendentes.";}
     else if(id==3440){personal.reviewPage=0;personalShow(PersonalView::OperationReview);}
@@ -156,7 +157,7 @@ void personalAgentUIAction(int id){
         auto found=personal.windows.find(personal.pendingWindow);if(found==personal.windows.end()||!hext::validAgentWindow(found->second)){personal.notice=L"A janela mudou ou foi fechada.";return;}
         if(personal.windowScopes.size()>=8){personal.notice=L"Revogue janelas anteriores antes de autorizar outra.";return;}
         personal.windowScopes.insert(personal.pendingWindow);auto pending=personal.task.waiting;personal.task.waiting.reset();personal.task.stage=hext::TaskStage::Executing;personal.view=PersonalView::None;
-        if(pending){personal.queued.insert(personal.queued.begin(),*pending);personalNext();}
+        if(pending){auto request=personalRefineAction(*pending);auto ticket=personal.gate.propose(personal.preferences,request,personal.chat);auto approved=personal.gate.consume(ticket.nonce,personal.preferences,personal.chat);if(approved)personalExecute(*approved,hext::ExecutionAuthority::User);personalNext();}
     }
     else if(id==3460){personalRevoke();personal.notice=L"Autorizações de janelas revogadas.";}
     else if(id==3470){personal.editorID="agent-data";personalShow(PersonalView::Delete);}

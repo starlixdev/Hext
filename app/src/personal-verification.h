@@ -9,8 +9,8 @@ int verifyPersonal(const std::filesystem::path& directory,bool provider,bool nat
     auto timer=hext::actionRequest(hext::Json{{"name","timer.start"},{"arguments",{{"minutes",2}}}});
     timerRunning=false;
     personalExecute(hext::ActionRequest{"timer.start",{{"minutes",-1}},hext::Category::Timers,false});check(!timerRunning,"native dispatch independently revalidates even an internally constructed invalid request");
-    personal.preferences.autonomy=hext::Autonomy::Chat;personal.queued={*timer};personalNext();check(!timerRunning&&!personal.approval,"chat-only denies an otherwise valid timer action");
-    personal.preferences.autonomy=hext::Autonomy::Ask;personal.queued={*timer};personalNext();check(personal.approval&&!timerRunning,"ask mode stages a concrete action without executing it");
+    personal.preferences.blocked=true;personal.queued={*timer};personalNext();check(!timerRunning&&!personal.approval,"native fail-closed state refuses actions");personal.preferences.blocked=false;
+    personal.preferences.mode=hext::PermissionMode::Ask;personal.queued={*timer};personalNext();check(personal.approval&&!timerRunning,"ask mode stages a concrete action without executing it");
     personal.transition.snap(1);render();check(exportFrame(directory/L"personal-approval.bmp"),"export native authorization view");
     personalRevoke();personalAction(3095);check(!timerRunning,"revoked approval cannot execute through the UI action handler");
     personal.queued={*timer};personalNext();personalAction(3095);check(timerRunning&&remaining()>119000&&remaining()<=120000,"UI approval executes the real Hext timer service");
@@ -27,10 +27,10 @@ int verifyPersonal(const std::filesystem::path& directory,bool provider,bool nat
     personal.pendingChat=first;personalShow(PersonalView::NewChat);personalCloseView();check(personal.pendingChat.empty(),"canceling a conversation switch clears its pending target");
     auto beforeFailure=conversation;conversation.push_back({true,std::wstring(1100000,L'x')});personal.dirty=true;personalNew(false);
     check(personal.chat==first&&personal.dirty&&conversation.size()==beforeFailure.size()+1,"a real storage payload-limit failure preserves the dirty chat instead of creating another");conversation=std::move(beforeFailure);personal.dirty=false;personal.notice.clear();
-    personal.preferences.autonomy=hext::Autonomy::Allowed;personal.preferences.grants[0]=hext::Grant::Deny;personalSavePreferences();auto saved=personal.store.get("settings","assistant");check(saved["grants"][0]==0,"individual permission changes are persisted");
+    personal.preferences.mode=hext::PermissionMode::Delegate;personalSavePreferences();auto saved=personal.store.get("settings","assistant");check(saved.value("permission_mode",-1)==1&&!saved.contains("grants")&&!saved.contains("services")&&!saved.contains("tools"),"only the global permission mode is persisted");
     personal.preferences=hext::AssistantPreferences{};personalSavePreferences();
     page=previousPage=5;settingsSection=3;settingsFade.snap(1);personal.view=PersonalView::None;
-    for(int tab=0;tab<5;tab++){
+    for(int tab=0;tab<4;tab++){
         personal.settingsTab=tab;personal.transition.snap(1);render();std::set<int> ids;bool valid=true;
         for(auto& hit:hits)valid=valid&&!hit.name.empty()&&hit.rect.left>=0&&hit.rect.right<=736&&hit.rect.top>=0&&hit.rect.bottom<=470&&ids.insert(hit.id).second;
         check(valid&&SUCCEEDED(lastRenderResult),"assistant settings controls are named, unique and within island bounds");
@@ -61,19 +61,19 @@ int verifyPersonal(const std::filesystem::path& directory,bool provider,bool nat
     personalAction(3095);auto created=hext::readAuthorizedText(folder/L"continued.md");check(created&&*created=="Original task resumed: native verification.","resumed task executes real native file creation and verifies its contents");
     check(personal.task.goal=="Prepare an authorized folder and create the original requested document","setup and approvals preserve the original task goal");personalRevoke();
     personal.task.begin(personal.chat,"Inspect an authorized folder");personal.queued={*hext::actionRequest(hext::Json{{"name","files.list"},{"arguments",{{"id","task-root"}}}})};personalNext();if(personal.approval)personalAction(3095);check(!personal.resources.empty(),"real folder enumeration creates scoped opaque item IDs");if(!personal.resources.empty()){auto child=personal.resources.begin()->first;personal.store.erase("asset","task-root");check(personalAsset(child).is_null(),"revoking a folder invalidates its derived item IDs before file access");personal.store.put("asset","task-root",{{"name","Task fixture folder"},{"path",hext::utf8(folder.wstring())},{"app",false}});}personalRevoke();
-    personal.preferences.grants[static_cast<int>(hext::Category::Files)]=hext::Grant::Deny;personal.task.begin(personal.chat,"A denied file request");personal.queued={*createText};personalNext();check(!personal.approval&&personal.task.stage==hext::TaskStage::Blocked,"denied category blocks the task before setup or a write");personalRevoke();personal.preferences=hext::AssistantPreferences{};
-    personal.task.begin(personal.chat,"Connect an unsupported resource");personal.preferences.autonomy=hext::Autonomy::Allowed;personal.preferences.grants.fill(hext::Grant::Allow);
+    personal.preferences.mode=hext::PermissionMode::Ask;personal.task.begin(personal.chat,"A denied file request");personal.queued={*createText};personalNext();if(personal.approval)personalCloseView();check(!personal.approval&&personal.task.stage==hext::TaskStage::Cancelled,"declined user approval stops the dependent file task");personalRevoke();personal.preferences=hext::AssistantPreferences{};
+    personal.task.begin(personal.chat,"Connect an unsupported resource");personal.preferences.mode=hext::PermissionMode::Always;
     personal.queued={*hext::actionRequest(hext::Json{{"name","capabilities.connect"},{"arguments",{{"id","unknown.external"}}}})};personalNext();if(personal.approval)personalAction(3095);check(personal.task.stage==hext::TaskStage::Blocked&&!personal.preparing,"unknown integration is reported unavailable without downloads or installation");personalRevoke();
     personal.preferences=hext::AssistantPreferences{};personal.task.begin(personal.chat,"Resume Spotify after official connection");personal.requestChat=personal.chat;
     auto pendingSpotify=hext::actionRequest(hext::Json{{"name","spotify.play"},{"arguments",{{"query","Named track fixture"}}}});personal.queued={*pendingSpotify};personalNext();check(personal.task.stage==hext::TaskStage::Setup&&personal.task.waiting->name=="spotify.play"&&!personal.spotify.busy(),"missing Spotify catalog connection retains the playback request without fabricating authentication");
     verifyOverlay(PersonalView::Setup,L"task-setup-spotify.bmp");personalCloseView();check(personal.task.stage==hext::TaskStage::Cancelled&&!personal.task.waiting,"canceling setup revokes the pending original request");
-    personal.view=PersonalView::Capability;personal.capability="spotify";personal.capabilityPermissions=true;verifyOverlay(PersonalView::Capability,L"task-resource-permissions.bmp");personal.capabilityPermissions=false;
-    personal.capabilityPage=0;verifyOverlay(PersonalView::Capabilities,L"task-capabilities.bmp");personal.capability="files";verifyOverlay(PersonalView::Capability,L"task-files.bmp");personal.capability="hext.skills";verifyOverlay(PersonalView::Capability,L"task-skills.bmp");personalRevoke();personal.view=PersonalView::None;
+    personal.capability="spotify";verifyOverlay(PersonalView::Connection,L"task-connection-spotify.bmp");
+    personal.capability="files";verifyOverlay(PersonalView::Setup,L"task-files.bmp");personal.capability="hext.skills";verifyOverlay(PersonalView::Connection,L"task-skills.bmp");personalRevoke();personal.view=PersonalView::None;
     auto originalRegistry=hext::nativeToolRegistry();auto capabilityCount=hext::nativeCapabilities().size();bool nativeReady=false;
     NativeCapabilityAdapter fixtureAdapter;fixtureAdapter.inspect=[&]{return hext::Json{{"ready",nativeReady},{"state",nativeReady?"ready":"configuration"},{"status","Native fixture adapter"}};};
     fixtureAdapter.execute=[&](const hext::ActionRequest& request){timerDuration=timerRemaining=request.args["minutes"].get<int>()*60000ULL;startTimer();personalReceipt(request,true,L"Registered native adapter started the real fixture timer.");return true;};
     fixtureAdapter.publicConfiguration=[](){return std::make_pair(std::wstring(L"Native adapter · public fixture ID"),std::string());};fixtureAdapter.configure=[&](const std::string& value){if(value!="fixture-ready")throw std::runtime_error("Invalid public fixture setting");nativeReady=true;};
-    fixtureAdapter.disconnect=[&]{nativeReady=false;};personal.preferences.autonomy=hext::Autonomy::Allowed;personal.preferences.grants.fill(hext::Grant::Allow);
+    fixtureAdapter.disconnect=[&]{nativeReady=false;};personal.preferences.mode=hext::PermissionMode::Ask;
     check(personalRegisterAdapter({"verify.native",L"Native fixture adapter",hext::Category::Timers,"Verification-only native adapter"},{{"verify.timer","verify.native","Start a real Hext fixture timer",hext::Category::Timers,hext::toolObject({{"minutes",hext::toolInteger(1,10)}})}},std::move(fixtureAdapter)),"a native adapter registers its capability and schema without changing the planner or permission gate");
     auto extension=hext::actionRequest(hext::Json{{"name","verify.timer"},{"arguments",{{"minutes",1}}}});personal.task.begin(personal.chat,"Use a native extension after setup");personal.queued={*extension};personalNext();check(personal.task.stage==hext::TaskStage::Setup&&!timerRunning,"new native adapter participates in on-demand setup");personalTaskAction(3318);assistantInput=L"invalid";personalCommitEditor();check(!nativeReady&&personal.view==PersonalView::Editor&&personal.task.waiting,"invalid public adapter configuration preserves the pending original task");assistantInput=L"fixture-ready";personalCommitEditor();check(personal.approval&&personal.approval->request.name=="verify.timer","the generic configuration editor resumes the adapter's original action through the same approval gate");personalAction(3095);check(timerRunning,"approved extension runs the real fixture timer through its registered executor");timerRunning=false;timerSymbol.snap(0);personalTaskAction(3319);check(!nativeReady&&!personal.task.active(),"generic disconnect revokes pending work and calls the native adapter cleanup");personalRevoke();personal.adapters.erase("verify.native");hext::nativeToolRegistry()=std::move(originalRegistry);hext::nativeCapabilities().resize(capabilityCount);
     personalProviderVerification=allowProvider;personal.view=PersonalView::None;personal.preferences=hext::AssistantPreferences{};
@@ -112,12 +112,12 @@ int verifyPersonal(const std::filesystem::path& directory,bool provider,bool nat
         personalNativeVerification=true;hext::SoundEngine probe;auto hr=probe.refresh();
         if(SUCCEEDED(hr)&&probe.reading[0].ready){
             auto original=probe.reading[0];int percent=static_cast<int>(std::lround(original.volume*100));
-            personal.preferences=hext::AssistantPreferences{};personal.preferences.autonomy=hext::Autonomy::Allowed;personal.preferences.grants[0]=hext::Grant::Allow;
+            personal.preferences=hext::AssistantPreferences{};personal.preferences.mode=hext::PermissionMode::Always;
             // Set mute to its existing value: verifies the native setter without interrupting sound.
             auto sameMute=hext::actionRequest(hext::Json{{"name","audio.set_mute"},{"arguments",{{"muted",original.muted}}}});personalExecute(*sameMute);probe.read(0);
             check(probe.reading[0].muted==original.muted&&conversation.back().text.find(L"Falhou")==std::wstring::npos,"real action executor writes and reads back the existing Windows mute state");
             if(std::abs(original.volume-percent/100.f)<.00001f){auto sameVolume=hext::actionRequest(hext::Json{{"name","audio.set_volume"},{"arguments",{{"percent",percent}}}});personal.queued={*sameVolume};personalNext();if(personal.approval)personalAction(3095);probe.read(0);check(std::abs(probe.reading[0].volume-original.volume)<.00001f,"real volume action is verified without changing the user's volume");}
-            personal.preferences.grants[0]=hext::Grant::Deny;personalExecute(*sameMute);check(conversation.back().text.find(L"Falhou")!=std::wstring::npos,"denied native action is refused before reaching Core Audio");
+            personal.preferences.mode=hext::PermissionMode::Ask;personalExecute(*sameMute);check(conversation.back().text.find(L"Falhou")!=std::wstring::npos,"denied native action is refused before reaching Core Audio");
         }else report<<"UNVERIFIED: no active Core Audio output device\n";
         personal.media.start("inspect");auto until=GetTickCount64()+8000;std::optional<hext::MediaResult> media;
         while(GetTickCount64()<until){media=personal.media.poll();if(media)break;Sleep(20);}
@@ -129,14 +129,14 @@ int verifyPersonal(const std::filesystem::path& directory,bool provider,bool nat
             std::filesystem::copy_file(child,executable);auto canonical=std::filesystem::canonical(executable);auto id=hext::randomID();
             personal.store.put("asset",id,{{"path",hext::utf8(canonical.wstring())},{"app",true},{"stamp",std::filesystem::last_write_time(canonical).time_since_epoch().count()}});
             auto launch=hext::actionRequest(hext::Json{{"name","apps.open"},{"arguments",{{"id",id}}}});
-            personal.preferences.autonomy=hext::Autonomy::Allowed;personal.preferences.grants[static_cast<int>(hext::Category::Apps)]=hext::Grant::Deny;personalExecute(*launch);
+            personal.preferences.mode=hext::PermissionMode::Always;personal.preferences.mode=hext::PermissionMode::Ask;personalExecute(*launch);
             check(!std::filesystem::exists(marker),"denied application action does not launch the registered fixture executable");
-            personal.preferences.grants[static_cast<int>(hext::Category::Apps)]=hext::Grant::Allow;personalExecute(*launch);until=GetTickCount64()+5000;
+            personalExecute(*launch);until=GetTickCount64()+5000;
             while(!std::filesystem::exists(marker)&&GetTickCount64()<until)Sleep(20);
             check(std::filesystem::exists(marker),"allowed application action launches a real registered native executable and observes its marker");
             personal.store.erase("asset",id);personalExecute(*launch);check(conversation.back().text.find(L"Falhou")!=std::wstring::npos,"revoking an authorized path blocks subsequent launches");
         }else report<<"UNVERIFIED: native-action-child.exe not built; real application launch test skipped\n";
-        personal.preferences.autonomy=hext::Autonomy::Allowed;personal.preferences.grants[static_cast<int>(hext::Category::Browser)]=hext::Grant::Allow;
+        personal.preferences.mode=hext::PermissionMode::Always;
         auto browser=hext::actionRequest(hext::Json{{"name","browser.search"},{"arguments",{{"query","Microsoft Windows desktop documentation"}}}});personalExecute(*browser);
         check(conversation.back().text.find(L"Pesquisa enviada")!=std::wstring::npos,"real browser search launch accepted by Windows (page load/content not inspected)");
     }

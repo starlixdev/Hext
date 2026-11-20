@@ -10,7 +10,7 @@ void personalParagraph(const std::wstring& value,float x,float y,float w,float h
 void drawPersonalOverlay(){
     auto view=personal.view;
     if(view==PersonalView::Tasks||view==PersonalView::WindowConsent||view==PersonalView::Intervention||view==PersonalView::OperationReview){drawAgentOverlay();return;}
-    if(view==PersonalView::Capabilities||view==PersonalView::Capability||view==PersonalView::Setup||view==PersonalView::SkillReview){drawTaskOverlay();return;}
+    if(view==PersonalView::Connection||view==PersonalView::Setup||view==PersonalView::SkillReview){drawTaskOverlay();return;}
     text(view==PersonalView::Chats?L"Conversas":view==PersonalView::Memory?L"Memória":view==PersonalView::Assets?L"Itens autorizados":view==PersonalView::Editor?personal.editorTitle:L"Assistant",204,87,454,21,0xF5F5F8,true);
     iconButton(3191,0xE711,L"Fechar painel",676,87,30,30);
     canvas->PushLayer(D2D1::LayerParameters(D2D1::RectF(196,125,722,470),nullptr,D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,D2D1::IdentityMatrix(),unit(personal.transition.value)),nullptr);
@@ -41,14 +41,14 @@ void drawPersonalOverlay(){
         personalParagraph(L"Você pode guardar o histórico atual ou descartá-lo. Descartar também remove as preferências derivadas que não foram fixadas.",236,289,444,64,13);
         button(3092,personal.pendingChat.empty()?L"Salvar e criar nova":L"Salvar e abrir",204,377,244,35,true);button(3093,personal.pendingChat.empty()?L"Descartar e criar nova":L"Descartar e abrir",460,377,252,35);button(3090,L"Cancelar",554,424,158,30);
     }else if(view==PersonalView::Action){
-        symbol(0xE72E,440,173,32,0xC9C9D2);alignedText(L"Permitir esta ação?",204,230,508,30,20,0xF0F0F5,true);
+        symbol(0xE72E,440,173,32,0xC9C9D2);alignedText(personal.disclosure?L"Compartilhar este conteúdo?":L"Permitir esta ação?",204,230,508,30,20,0xF0F0F5,true);
         if(personal.approval){
             auto& request=personal.approval->request;bool creating=request.name=="files.create_text";
-            personalParagraph(personalActionLabel(request),236,creating?266:284,444,creating?58:70,creating?12:16,0xE5E5ED);
+            personalParagraph(personal.disclosure?L"Compartilhar com o provedor de IA o resultado que pode conter informações sensíveis?":personalActionLabel(request),236,creating?266:284,444,creating?58:70,creating?12:16,0xE5E5ED);
             if(creating){box(228,326,460,63,0xFFFFFF,8,.045f);personalParagraph(hext::wide(hext::utf8Excerpt(request.args["text"],0,240)),238,332,440,49,11,0xC8C8D2);}
         }
-        if(personal.approval&&!personalAgentLabel(personal.approval->request).empty())button(3440,L"Ver detalhes",204,365,154,28);
-        if(!personal.approval||personalAgentLabel(personal.approval->request).empty())personalParagraph(L"Esta autorização vale somente para esta solicitação e expira em dois minutos.",236,personal.approval&&personal.approval->request.name=="files.create_text"?391:354,444,personal.approval&&personal.approval->request.name=="files.create_text"?18:38,personal.approval&&personal.approval->request.name=="files.create_text"?9:12);
+        if(personal.approval&&!personal.disclosure&&!personalAgentLabel(personal.approval->request).empty())button(3440,L"Ver detalhes",204,365,154,28);
+        personalParagraph(personal.reviewReason.empty()?L"Esta autorização vale somente para esta ação e expira em dois minutos.":hext::wide(personal.reviewReason),236,personal.approval&&personal.approval->request.name=="files.create_text"?391:354,444,personal.approval&&personal.approval->request.name=="files.create_text"?18:48,personal.approval&&personal.approval->request.name=="files.create_text"?9:11);
         button(3090,L"Cancelar",204,414,244,35);button(3095,L"Permitir uma vez",460,414,252,35,true);
     }else if(view==PersonalView::Remember){
         symbol(0xE8A5,440,173,32,0xC9C9D2);alignedText(L"Guardar esta preferência?",204,230,508,30,20,0xF0F0F5,true);
@@ -77,7 +77,7 @@ void drawPersonalSpotify(){
         button(3310,state.busy?L"Conectando…":desktop?L"Conectar conta…":!hext::SpotifyService::validClient(personal.spotify.clientID())?L"Configurar e conectar":state.credentials?L"Verificar conexão":L"Conectar",460,298,252,32,!desktop);
         if(state.credentials){button(3083,L"Pesquisar músicas",204,344,244,32);button(3084,L"Dispositivos",460,344,252,32);button(3190,L"Gerenciar acesso",204,414,244,30);button(3082,L"Desconectar",554,414,158,30);}
         else personalParagraph(personal.view==PersonalView::Setup?L"O Hext retoma o pedido após a conexão. O Client ID e a autorização da sua conta precisam ser fornecidos por você.":L"Conexão opcional. O controle de reprodução depende de Spotify Premium e do acesso autorizado ao aplicativo.",220,356,476,62,12);
-        if(personal.view!=PersonalView::Setup)button(3311,L"Permissões",204,414,160,30);
+
         if(personal.setupReason=="device"||personal.setupReason=="select-device")button(3317,L"Abrir Spotify",204,375,244,30);
     }else{
         button(3089,L"Voltar",204,168,100,30);button(3083,L"Pesquisar",316,168,180,30);button(3084,L"Dispositivos",508,168,204,30);
@@ -101,8 +101,8 @@ void drawPersonalSpotify(){
     }
 }
 void drawPersonalSettings(){
-    const wchar_t* names[]={L"Provedor",L"Ações",L"Memória",L"Dados",L"Capacidades"};
-    for(int i=0;i<5;i++)button(3000+i,names[i],204+i*102.f,130,100,28,false,personal.settingsTab==i);
+    const wchar_t* names[]={L"Provedor",L"Permissões",L"Memória",L"Dados"};
+    for(int i=0;i<4;i++)button(3000+i,names[i],204+i*129.f,130,121,28,false,personal.settingsTab==i);
     canvas->PushLayer(D2D1::LayerParameters(D2D1::RectF(196,164,722,470),nullptr,D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,D2D1::IdentityMatrix(),unit(personal.transition.value)),nullptr);
     if(personal.settingsTab==0){
         box(204,168,508,66,0xFFFFFF,13,.045f);text(L"Assistente",220,184,250,14,0xF0F0F5,true);settingsChoice(465,L"Assistente",assistantName(),178);
@@ -113,21 +113,21 @@ void drawPersonalSettings(){
         text(L"Idioma das respostas",220,389,476,12,0xB7B7C1);
         button(3160,L"Automático",220,412,151,30,false,personal.preferences.language=="auto");button(3161,L"Português",383,412,151,30,false,personal.preferences.language=="pt-BR");button(3162,L"English",546,412,150,30,false,personal.preferences.language=="en");
     }else if(personal.settingsTab==1){
-        text(L"Autonomia",220,174,476,13,0xDADAE4,true);
-        const wchar_t* levels[]={L"Conversar",L"Pedir autorização",L"Ações permitidas"};for(int i=0;i<3;i++)button(3020+i,levels[i],204+i*172.f,200,164,31,false,static_cast<int>(personal.preferences.autonomy)==i);
-        for(int row=0;row<4;row++){int category=personal.permissionPage*4+row;if(category>=static_cast<int>(hext::Category::Count))break;float y=247+row*38.f;box(204,y,508,34,0xFFFFFF,8,.035f);alignedText(hext::categoryName(static_cast<hext::Category>(category)),218,y,304,34,12,0xDEDEE7,false,false);auto grant=personal.preferences.grants[category];button((category<8?3040:3400)+category,grant==hext::Grant::Deny?L"Negar":grant==hext::Grant::Ask?L"Perguntar":L"Permitir",536,y+2,164,30,false,grant==hext::Grant::Allow);}
-        button(3050,L"Próximas permissões",204,414,200,30);button(3170,L"Revogar todas",536,414,176,30);
-        alignedText(std::to_wstring((static_cast<int>(hext::Category::Count)+3)/4)+L"/"+std::to_wstring(personal.permissionPage+1),416,414,80,30,10,0x9A9AA6,false,false);
-        if(personal.notice.empty())text(L"Ações sensíveis sempre exigem confirmação.",220,450,476,10,0xB7B7C1);
-    }else if(personal.settingsTab==2){
+        const wchar_t* levels[]={L"Sempre Perguntar",L"Aprovar por mim",L"Permitir Sempre"};
+        const wchar_t* details[]={L"Você autoriza as ações antes da execução.",L"A IA avalia cada ação e pede sua ajuda quando necessário.",L"Executa ações rotineiras automaticamente."};
+        for(int i=0;i<3;i++){
+            float y=176+i*76.f;bool selected=static_cast<int>(personal.preferences.mode)==i;
+            button(3020+i,L"",204,y,508,66,false,selected);alignedText(levels[i],224,y+7,448,25,15,selected?accentForeground():0xEEEEF4,true,false);alignedText(details[i],224,y+35,448,23,11,selected?accentForeground():0xB7B7C1,false,false);if(selected)symbol(0xE73E,679,y+22,16,accentForeground());hits.back().name=levels[i];
+        }
+        personalParagraph(L"Operações de alto risco, autenticações e acessos sensíveis continuam protegidos em todos os modos.",220,414,476,38,12);    }else if(personal.settingsTab==2){
         box(204,168,508,92,0xFFFFFF,13,.045f);drawToggle(3060,personal.preferences.memory,220,187,36,20,true);text(L"Memória compartilhada",268,189,420,14,0xEEEEF4,true);hit(3060,216,177,480,43,L"Ativar memória compartilhada");
         text(L"Preferências revisáveis entre suas conversas",220,231,476,12,0xB7B7C1);button(3061,L"Gerenciar memória",204,282,244,34,true);button(3063,L"Nova preferência",460,282,252,34);
         personalParagraph(L"O assistente sugere informações úteis. Você decide o que guardar. Inferências não substituem preferências explícitas.",220,340,476,64,13);button(3062,L"Apagar memória",204,414,244,30);
     }else if(personal.settingsTab==3){
         box(204,168,508,90,0xFFFFFF,13,.045f);text(L"Suas conversas",220,184,476,15,0xF0F0F5,true);text(L"Históricos independentes, salvos neste computador",220,211,476,12,0xB7B7C1);
-        button(3070,L"Conversas salvas",204,278,244,34,true);button(3091,L"Salvar conversa atual",460,278,252,34);button(3071,L"Itens autorizados",204,330,244,34);button(3420,L"Tarefas pendentes",460,330,252,34);
-        button(3075,L"Apagar dados do Assistant",204,414,300,30);personalParagraph(L"Gerencie aplicativos, arquivos e pastas que podem ser abertos.",220,381,476,24,12);
-    }else drawCapabilityList();
+        button(3070,L"Conversas salvas",204,278,244,34,true);button(3091,L"Salvar conversa atual",460,278,252,34);button(3470,L"Limpar ambientes",204,330,244,34);button(3420,L"Tarefas pendentes",460,330,252,34);
+        button(3075,L"Apagar dados do Assistant",204,414,300,30);personalParagraph(L"O assistente solicita configurações somente quando necessário.",220,381,476,24,12);
+    }
     if(!personal.notice.empty())text(personal.notice,212,448,492,10,0xD9D9E2);
     canvas->PopLayer();
 }

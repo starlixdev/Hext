@@ -22,8 +22,8 @@ Change both global shortcuts in **Personalizar → Geral**. Hext checks whether 
 
 ## What is implemented
 
-- Structured assistant actions with per-category permissions, one-time approvals, and protected Codex/Claude adapters. A compatible installed CLI and its own authentication are required; arbitrary text CLIs cannot run the protected protocol.
-- Task planning across tool results, on-demand configuration inside a conversation, a shared capabilities catalog, service/tool permissions, and reviewed declarative skills.
+- Structured assistant actions with three global permission modes, one-use approvals, and protected Codex/Claude adapters. A compatible installed CLI and its own authentication are required; arbitrary text CLIs cannot run the protected protocol.
+- Task planning across tool results, independent AI action review, on-demand configuration inside a conversation, an internal capabilities registry, and reviewed declarative skills. There is no capabilities settings catalog to manage.
 - General agent tools: isolated PowerShell, public HTTPS research, authorized Windows accessibility controls, explicit package proposals, and durable task checkpoints. See [general agent boundaries](docs/agent.md).
 - Encrypted saved conversations, separate bounded preference memory, and configurable response language.
 - Optional Spotify PKCE connection, text search, device selection, and playback controls, subject to Spotify account and application access.
@@ -42,6 +42,7 @@ Install MinGW-w64 with `g++` and `windres`, then run in PowerShell:
 ./scripts/test.ps1
 ./app/dist/Hext-preview.exe --verify-render
 ./app/dist/Hext-preview.exe --verify-personal
+./app/dist/Hext-preview.exe --verify-permissions
 ```
 
 The hidden renderer exports images and checks interaction states without recording the desktop. Build prerequisites, test boundaries, and release steps are in [Development](docs/development.md).
@@ -56,6 +57,8 @@ scripts/             Tests and clean release packaging
 ```
 
 Local settings, assistant sessions, downloads, previous executables, and generated test images are excluded from version control. Release ZIPs contain a clean executable and documentation, not a developer configuration.
+
+Choose **Sempre Perguntar**, **Aprovar por mim**, or **Permitir Sempre** in **Personalizar → Assistant → Permissões**. The middle mode uses a separate restricted AI review of each concrete action; unavailable or uncertain review asks you instead. High-risk operations and sensitive sharing still require consent in every mode. Older permission settings migrate to Sempre Perguntar.
 
 Read [Tasks and capabilities](docs/tasks.md), [Assistant setup](docs/assistant.md), [Hardware readings](docs/hardware.md), [Architecture](docs/architecture.md), and [Contributing](CONTRIBUTING.md) for details.
 

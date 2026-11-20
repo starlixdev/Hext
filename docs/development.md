@@ -30,7 +30,7 @@ The GitHub Actions token is supplied by GitHub only at runtime. No repository se
 
 The build fetches pinned nlohmann/json 3.12.0 and SQLite 3.54.1 sources through `scripts/dependencies.ps1`, checks SHA-256, and compiles SQLite with extension loading disabled. These build-time downloads stay in ignored `app/deps`; the executable needs no additional runtime. Licenses and source references are in `THIRD_PARTY_NOTICES.md`.
 
-The console suite checks strict JSON, action parameters, autonomy/grant combinations, approval binding/replay/revocation, Spotify voice denial, DPAPI encryption, transaction rollback, bounded memory, OAuth state, and a published PKCE vector. `restart-store-test` saves data and reloads it in a separate Windows process. Default tests require no provider or Spotify account.
+The console suite checks strict JSON, action parameters, all three global modes, conservative migration, human/reviewer permit binding/replay/revocation, Spotify voice denial, DPAPI encryption, transaction rollback, bounded memory, OAuth state, and a published PKCE vector. `restart-store-test` saves data including all three modes and reloads it in a separate Windows process. Default tests require no provider or Spotify account.
 
 Use a hidden process and wait before reading the controller/renderer report:
 
@@ -43,6 +43,10 @@ if ($check.ExitCode -ne 0) { throw 'Verification failed' }
 
 This isolated instance exercises actual timer approval, denied/revoked requests, conversation save/open/rename/delete, shared/disabled memory, settings bounds, and named controls. It exports its own DIB surface without capturing the desktop. CI runs it alongside the existing renderer.
 
+`--verify-permissions` adds account-free native tests for all three global modes and the four-tab interface. It denies/approves actual timer steps, runs an automatic timer sequence, checks mandatory installation consent without dispatching an installer, and reads a generated credential-marker file to verify that sensitive results are held before provider context/checkpoints, discarded on denial, or released once on approval. Native frames are `permissions-mode-0.bmp` through `permissions-mode-2.bmp`; the report is `authorization-verification.txt`. A test-only dependency-ready flag isolates package authorization from machine-specific WinGet setup; it does not simulate a successful installation.
+
+`--verify-permissions-provider` additionally uses the real authenticated protected Codex CLI as the independent reviewer. It must authorize a timer plus creation/readback of a generated note inside the actual AppContainer without human confirmation, then deny or escalate a timer that contradicts the original request. This consumes provider usage. The primary planner is deliberately disabled in this fixture to isolate the review path; `--verify-agent-provider` separately verifies actual planning and native execution. Invalid/unavailable review falls back to human consent. Do not publish `authorization-review-debug.json` or generated private test directories. See [current results](verification-0.11.0.md).
+
 Optional local tests must be reported separately:
 
 - `--verify-personal-provider`: checks real Codex authentication/sandbox, exercises approved timer and dependent file/timer tasks in an isolated Hext instance, and checks an unsupported request. This consumes provider usage.
@@ -54,9 +58,9 @@ Optional local tests must be reported separately:
 
 Never publish private fixture databases, `personal-provider-debug.json`, `task-provider-debug.json`, raw login output, or user settings. Passing error handling does not establish successful Spotify OAuth/playback. Claude needs a separately installed, authenticated CLI for full validation. See [validation results](verification-0.9.0.md).
 
-The task console suite checks the shared tool schema, service/action overrides, native-scoped media policy, declarative recipe validation, duplicate/budget limits, actual UTF-8 text creation/readback, and a CLI lifecycle regression. Its generated child emits a completed structured turn but stays alive; Hext must decode completion and release its owned job without waiting thirty seconds. This is a process-protocol fixture, not a simulated provider integration.
+The task console suite checks the shared tool schema, global authorization, native-scoped media policy, declarative recipe validation, duplicate/budget limits, actual UTF-8 text creation/readback, and a CLI lifecycle regression. Its generated child emits a completed structured turn but stays alive; Hext must decode completion and release its owned job without waiting thirty seconds. This is a process-protocol fixture, not a simulated provider integration.
 
-The controller verifier also covers missing-resource suspension, configuration/approval resumption without another message, derived-file scope revocation, unsupported resources, setup cancellation, and native adapter registration/configuration. Its native adapter fixture starts the actual isolated Hext timer and defaults to service-level confirmation even when its category is allowed. The fixture is not installed in normal application runs.
+The controller verifier also covers missing-resource suspension, configuration/approval resumption without another message, derived-file scope revocation, unsupported resources, setup cancellation, and native adapter registration/configuration. Its native adapter fixture starts the actual isolated Hext timer through the same global gate. The fixture is not installed in normal application runs.
 
 `--verify-personal-provider` additionally performs a real multi-turn Codex task: read an authorized fixture file, create a second file from the returned content, and start a timer. It verifies content equality, ordering, timer state, and final task completion. Test approvals are limited to fixture file operations and the timer; the harness does not approve arbitrary actions from the provider. It also verifies a request that cannot be fulfilled. These calls consume provider usage.
 
