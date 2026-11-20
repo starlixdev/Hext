@@ -100,6 +100,27 @@ void drawPersonalSpotify(){
         if(personal.notice.empty())text(L"Spotify · "+state.status,212,447,492,10,0xB7B7C1);
     }
 }
+void drawPermissionOption(int id,const std::wstring& title,const std::wstring& detail,float y,bool selected){
+    button(id,L"",204,y,508,66,false,selected);hits.back().name=title;
+    IDWriteTextLayout* layouts[2]{};DWRITE_OVERHANG_METRICS ink[2]{};
+    const std::wstring* labels[]={&title,&detail};
+    for(int i=0;i<2;i++){
+        if(FAILED(textFactory->CreateTextLayout(labels[i]->c_str(),static_cast<UINT32>(labels[i]->size()),font(i?11:15,!i),428,24,&layouts[i]))){for(auto layout:layouts)if(layout)layout->Release();return;}
+        layouts[i]->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);layouts[i]->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);layouts[i]->GetOverhangMetrics(&ink[i]);
+    }
+    // Center the two lines as one block, with a shared spacing and visible left edge.
+    float top=std::min(-ink[0].top,25-ink[1].top),bottom=std::max(24+ink[0].bottom,49+ink[1].bottom);
+    float origin=y+(66-bottom+top)/2-top;
+    D2D1_MATRIX_3X2_F original;canvas->GetTransform(&original);
+    float scale=static_cast<float>(controlMotion[id].press.value);
+    canvas->SetTransform(D2D1::Matrix3x2F::Scale(scale,scale,D2D1::Point2F(458,y+33))*original);
+    for(int i=0;i<2;i++){
+        use(selected?accentForeground():i?0xB7B7C1:0xEEEEF4);
+        canvas->DrawTextLayout(D2D1::Point2F(224+ink[i].left,origin+i*25),layouts[i],brush);layouts[i]->Release();
+    }
+    if(selected)symbol(0xE73E,676,y+25,16,accentForeground());
+    canvas->SetTransform(original);
+}
 void drawPersonalSettings(){
     const wchar_t* names[]={L"Provedor",L"Permissões",L"Memória",L"Dados"};
     for(int i=0;i<4;i++)button(3000+i,names[i],204+i*129.f,130,121,28,false,personal.settingsTab==i);
@@ -117,9 +138,10 @@ void drawPersonalSettings(){
         const wchar_t* details[]={L"Você autoriza as ações antes da execução.",L"A IA avalia cada ação e pede sua ajuda quando necessário.",L"Executa ações rotineiras automaticamente."};
         for(int i=0;i<3;i++){
             float y=176+i*76.f;bool selected=static_cast<int>(personal.preferences.mode)==i;
-            button(3020+i,L"",204,y,508,66,false,selected);alignedText(levels[i],224,y+7,448,25,15,selected?accentForeground():0xEEEEF4,true,false);alignedText(details[i],224,y+35,448,23,11,selected?accentForeground():0xB7B7C1,false,false);if(selected)symbol(0xE73E,679,y+22,16,accentForeground());hits.back().name=levels[i];
+            drawPermissionOption(3020+i,levels[i],details[i],y,selected);
         }
-        personalParagraph(L"Operações de alto risco, autenticações e acessos sensíveis continuam protegidos em todos os modos.",220,414,476,38,12);    }else if(personal.settingsTab==2){
+        personalParagraph(L"Operações de alto risco, autenticações e acessos sensíveis continuam protegidos em todos os modos.",224,414,468,34,10);
+    }else if(personal.settingsTab==2){
         box(204,168,508,92,0xFFFFFF,13,.045f);drawToggle(3060,personal.preferences.memory,220,187,36,20,true);text(L"Memória compartilhada",268,189,420,14,0xEEEEF4,true);hit(3060,216,177,480,43,L"Ativar memória compartilhada");
         text(L"Preferências revisáveis entre suas conversas",220,231,476,12,0xB7B7C1);button(3061,L"Gerenciar memória",204,282,244,34,true);button(3063,L"Nova preferência",460,282,252,34);
         personalParagraph(L"O assistente sugere informações úteis. Você decide o que guardar. Inferências não substituem preferências explícitas.",220,340,476,64,13);button(3062,L"Apagar memória",204,414,244,30);
