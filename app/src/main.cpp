@@ -35,6 +35,7 @@
 #include "assistant.h"
 #include "personal-core.h"
 #include "chat-interaction.h"
+#include "conversation-policy.h"
 #include "personal-net.h"
 #include "personal-media.h"
 #include "task-engine.h"
@@ -1994,6 +1995,7 @@ int recordMotion(const std::filesystem::path& directory){
 #include "agent-verification.h"
 #include "authorization-verification.h"
 #include "chat-verification.h"
+#include "conversation-verification.h"
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     int workerArgumentCount=0;auto workerArguments=CommandLineToArgvW(GetCommandLineW(),&workerArgumentCount);
     bool desktopWorker=workerArguments&&workerArgumentCount==2&&std::wstring(workerArguments[1])==L"--agent-desktop-worker";
@@ -2003,12 +2005,13 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     bool agentCheck=std::wstring(arguments).find(L"--verify-agent")!=std::wstring::npos;
     bool authorizationCheck=std::wstring(arguments).find(L"--verify-permissions")!=std::wstring::npos;
     bool chatCheck=std::wstring(arguments).find(L"--verify-chat")!=std::wstring::npos;
+    bool conversationCheck=std::wstring(arguments).find(L"--verify-conversation")!=std::wstring::npos;
     std::wstring chatRestart;auto restartOffset=std::wstring(arguments).find(L"--verify-chat-restart=");
     if(restartOffset!=std::wstring::npos){chatRestart=std::wstring(arguments).substr(restartOffset+std::wstring(L"--verify-chat-restart=").size(),32);if(!hext::agentID(hext::utf8(chatRestart)))return 2;}
     bool recording=std::wstring(arguments).find(L"--record-motion")!=std::wstring::npos;
     bool connectionCheck=std::wstring(arguments).find(L"--verify-connection")!=std::wstring::npos;
     bool hardwareCheck=std::wstring(arguments).find(L"--verify-hardware")!=std::wstring::npos;
-    testMode=chatCheck||personalCheck||agentCheck||authorizationCheck||recording||connectionCheck||hardwareCheck||std::wstring(arguments).find(L"--verify-render")!=std::wstring::npos;
+    testMode=conversationCheck||chatCheck||personalCheck||agentCheck||authorizationCheck||recording||connectionCheck||hardwareCheck||std::wstring(arguments).find(L"--verify-render")!=std::wstring::npos;
     HANDLE single=testMode?nullptr:CreateMutex(nullptr,FALSE,L"Local\\HextIsland");
     if(!testMode&&GetLastError()==ERROR_ALREADY_EXISTS){
         MessageBox(nullptr,L"O Hext já está aberto. Passe o mouse no centro superior da área de trabalho.",L"Hext",MB_OK);
@@ -2075,7 +2078,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     }
     accessibleUI=new HextAccessible;
     if(testMode){
-        int result=chatCheck?verifyChat(std::filesystem::path(configPath).parent_path(),!chatRestart.empty()):authorizationCheck?verifyAuthorization(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos):agentCheck?verifyAgent(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos):personalCheck?verifyPersonal(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos,std::wstring(arguments).find(L"native")!=std::wstring::npos):
+        int result=conversationCheck?verifyConversation(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos,std::wstring(arguments).find(L"spotify")!=std::wstring::npos):chatCheck?verifyChat(std::filesystem::path(configPath).parent_path(),!chatRestart.empty()):authorizationCheck?verifyAuthorization(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos):agentCheck?verifyAgent(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos):personalCheck?verifyPersonal(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos,std::wstring(arguments).find(L"native")!=std::wstring::npos):
             hardwareCheck?verifyHardware(std::filesystem::path(configPath).parent_path()):
             connectionCheck?verifyAssistantConnection(std::filesystem::path(configPath).parent_path()):
             recording?recordMotion(std::filesystem::path(configPath).parent_path()):

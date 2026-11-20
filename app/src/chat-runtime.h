@@ -45,14 +45,18 @@ void personalPresentInline(PersonalView view){
     assistantStatus=view==PersonalView::Action||view==PersonalView::WindowConsent?L"Aguardando sua autorização.":view==PersonalView::Remember||view==PersonalView::SkillReview?L"Aguardando sua revisão.":view==PersonalView::Intervention?L"Verificando a etapa no aplicativo…":L"Aguardando configuração.";
     if(personal.inlineView==view&&personal.inlineChat==personal.chat&&personal.inlineTask==task&&personal.inlineNonce==nonce){personal.view=PersonalView::None;invalidate(160);return;}
     personalResolveInline("completed");if(conversation.size()>=498){personal.requestActive=false;personal.task.stage=hext::TaskStage::Blocked;assistantStatus=L"Limite da conversa. Salve e inicie outra antes de continuar.";return;}
-    personal.inlineID=hext::randomID();personal.inlineChat=personal.chat;personal.inlineTask=task;personal.inlineNonce=nonce;personal.inlineView=view;personal.view=PersonalView::None;personal.notice.clear();
+    personal.inlineID=personal.reuseCard.empty()?hext::randomID():personal.reuseCard;personal.inlineChat=personal.chat;personal.inlineTask=task;personal.inlineNonce=nonce;personal.inlineView=view;personal.view=PersonalView::None;personal.notice.clear();
     hext::Json card={{"version",1},{"id",personal.inlineID},{"chat",personal.chat},{"task",task},{"kind",kind},{"state","pending"},{"title",hext::utf8(title)}};
-    conversation.push_back({false,body.substr(0,1600),true,false,card});personal.dirty=true;assistantScroll=0;
+    bool reused=false;if(!personal.reuseCard.empty())for(auto& message:conversation)if(message.card.is_object()&&message.card.value("id","")==personal.reuseCard){message.text=body.substr(0,1600);message.card=card;reused=true;break;}
+    if(!reused)conversation.push_back({false,body.substr(0,1600),true,false,card});
+    personal.dirty=true;assistantScroll=0;
     personal.inlineReveal.snap(motionReduced()?1:0);personal.inlineReveal.target=1;personal.inlineReveal.frequency=45;personal.inlineReveal.damping=1;
     if(personal.saved)personalSaveChat();
     personalCheckpoint();invalidate(220);
+    if(view==PersonalView::Setup&&personal.task.stage==hext::TaskStage::Setup)personalQueueGuidance();
 }
 void personalCancelChat(const std::string& state){
+    personal.preserveCheckpoint=false;
     if(personal.inlineView==PersonalView::Remember){personalResolveInline("skipped");personal.memoryDraft=nullptr;personalAppend(false,L"Preferência não guardada.",true);return;}
     personalResolveInline(state);personalRevoke();personal.view=PersonalView::None;
     personalAppend(false,state=="denied"?L"Você negou esta ação. Nenhuma etapa pendente será executada. Se preferir, posso orientar você a realizar a tarefa manualmente ou adaptar o pedido.":L"Tarefa cancelada. Etapas já concluídas não são desfeitas.",true);

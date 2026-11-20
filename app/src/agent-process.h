@@ -45,7 +45,8 @@ struct AgentContainer {
         code=SetNamedSecurityInfoW(const_cast<wchar_t*>(workspace.c_str()),SE_FILE_OBJECT,LABEL_SECURITY_INFORMATION,nullptr,nullptr,nullptr,sacl);LocalFree(label);return code==ERROR_SUCCESS;
     }
 };
-inline AgentProcessResult agentProcess(const std::wstring& executable,const std::vector<std::wstring>& arguments,const std::filesystem::path& work,std::atomic<bool>& cancel,DWORD timeout=30000,PSID container=nullptr,const std::string& input=""){
+inline AgentProcessResult agentProcess(const std::wstring& executable,const std::vector<std::wstring>& arguments,const std::filesystem::path& work,std::atomic<bool>& cancel,DWORD timeout=30000,PSID container=nullptr,const std::string& input="",size_t outputLimit=65536){
+    outputLimit=std::clamp<size_t>(outputLimit,65536,1048576);
     AgentProcessResult result;if(cancel){result.cancelled=true;result.code=ERROR_CANCELLED;return result;}
     SECURITY_ATTRIBUTES sa{sizeof(sa),nullptr,TRUE};OwnedHandle readOut,writeOut,readErr,writeErr,readIn,writeIn,job;
     if(!CreatePipe(&readOut.value,&writeOut.value,&sa,0)||!CreatePipe(&readErr.value,&writeErr.value,&sa,0)||!CreatePipe(&readIn.value,&writeIn.value,&sa,0)){result.code=GetLastError();return result;}
@@ -76,7 +77,7 @@ inline AgentProcessResult agentProcess(const std::wstring& executable,const std:
     ResumeThread(thread.value);
     if(!input.empty()){DWORD wrote=0;if(input.size()>8192||!WriteFile(writeIn.value,input.data(),static_cast<DWORD>(input.size()),&wrote,nullptr)||wrote!=input.size()){TerminateJobObject(job.value,1);result.code=ERROR_WRITE_FAULT;return result;}}
     CloseHandle(writeIn.value);writeIn.value=nullptr;auto deadline=GetTickCount64()+timeout;
-    auto drain=[&](HANDLE h,std::string& target){char buffer[4096];DWORD available=0,n=0;for(int i=0;i<16&&PeekNamedPipe(h,nullptr,0,nullptr,&available,nullptr)&&available;i++){if(!ReadFile(h,buffer,std::min<DWORD>(available,sizeof(buffer)),&n,nullptr)||!n)break;auto count=std::min<size_t>(n,65536-target.size());target.append(buffer,count);if(count<n)result.truncated=true;}};
+    auto drain=[&](HANDLE h,std::string& target){char buffer[4096];DWORD available=0,n=0;for(int i=0;i<16&&PeekNamedPipe(h,nullptr,0,nullptr,&available,nullptr)&&available;i++){if(!ReadFile(h,buffer,std::min<DWORD>(available,sizeof(buffer)),&n,nullptr)||!n)break;auto count=std::min<size_t>(n,outputLimit-target.size());target.append(buffer,count);if(count<n)result.truncated=true;}};
     for(;;){drain(readOut.value,result.output);drain(readErr.value,result.error);if(WaitForSingleObject(child.value,10)==WAIT_OBJECT_0)break;if(cancel||GetTickCount64()>=deadline||result.truncated){result.cancelled=cancel.load();result.timedOut=!result.cancelled&&!result.truncated;TerminateJobObject(job.value,1);WaitForSingleObject(child.value,1500);break;}}
     drain(readOut.value,result.output);drain(readErr.value,result.error);GetExitCodeProcess(child.value,&result.code);return result;
 }

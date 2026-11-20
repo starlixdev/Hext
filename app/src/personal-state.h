@@ -7,6 +7,7 @@ struct NativeCapabilityAdapter {
     std::function<std::pair<std::wstring,std::string>()> publicConfiguration;
     std::function<void(const std::string&)> configure;
     std::function<void()> disconnect;
+    std::function<hext::Json()> guidance;
 };
 struct PersonalState {
     hext::PersonalStore store;
@@ -23,6 +24,20 @@ struct PersonalState {
     std::string reviewTask,reviewChat,reviewReason;
     struct Disclosure {hext::ActionRequest request;bool success;std::wstring detail;hext::Json data;};
     std::optional<Disclosure> disclosure;
+    struct WaitingContinuation {
+        hext::TaskStage stage=hext::TaskStage::Idle;
+        PersonalView view=PersonalView::None;
+        std::optional<hext::ActionRequest> pending;
+        std::vector<hext::ActionRequest> queue;
+        std::string capability,reason,card;
+        std::optional<Disclosure> disclosure;
+    };
+    std::optional<WaitingContinuation> continuation;
+    std::string clarification,guidedSetup;
+    bool clarificationQueued=false,autoGuide=false;
+    bool discussionOnly=false;
+    std::string reuseCard,discussionTask;
+    hext::Json resumeContext=nullptr;
     bool agentOwned=false,preserveCheckpoint=false,checkpointFailed=false,packagesVerified=false;
     ULONGLONG lastCheckpoint=0;
     std::string checkpointDigest,pendingWindow,selectedTask;
@@ -116,7 +131,15 @@ void personalCancelChat(const std::string& state="cancelled");
 hext::Json personalMessageRecord(const ChatMessage&,bool checkpoint=false);
 ChatMessage personalRestoreMessage(const hext::Json&,bool checkpoint=false);
 void personalLoadPendingChat(const std::string&);
-void personalRestoreTask(const std::string&);
+void personalRestoreTask(const std::string&,bool start=true);
+hext::Json personalPendingContext();
+hext::Json personalConfigurationInfo(const std::string&);
+void personalClarify(const std::wstring&,bool automatic=false);
+void personalStartClarification();
+void personalFinishClarification();
+void personalQueueGuidance();
+bool personalConversationError(const std::wstring&);
+bool personalConversationTool(const hext::ActionRequest&);
 void personalExecute(const hext::ActionRequest&,hext::ExecutionAuthority authority=hext::ExecutionAuthority::None);
 void personalReceipt(const hext::ActionRequest&,bool,const std::wstring&,const hext::Json& data=nullptr,bool disclosureApproved=false);
 bool personalBusy(){return personal.reviewer.busy||assistantBridge.busy||personal.requestActive||personal.spotifyOwned||personal.mediaOwned||personal.applicationsOwned||personal.agentOwned;}

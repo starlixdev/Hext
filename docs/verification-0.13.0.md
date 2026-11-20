@@ -1,0 +1,25 @@
+# Hext 0.13.0 verification
+
+Validated on Windows 11 x64 on November 20, 2026. The application retains C++17/Win32/Direct2D, the existing island motion, three global permission modes, encrypted chats, bounded memory and one native action gate.
+
+## Implemented behavior
+
+Pending setup no longer turns the composer into a public-value form or returns a fixed busy response. The protected provider receives the original objective, latest clarification and safe native configuration facts. It can inspect readiness, research official sources, open a validated public HTTPS page through the gate, apply a user-supplied public value through an adapter, amend a procedure or cancel. A value cannot be invented by the model: the host checks its provenance in the current user message before the real adapter validates it. Configuration success does not imply authentication success.
+
+Clarification retains the exact suspended request and queued dependent steps. Answering restores that request and checks readiness again. Native operations already in progress retain their ownership while the user asks questions. Failed or malformed provider replies restore pending setup; they cannot complete an ongoing native operation. A paused task can be discussed without replaying effects. Restart uses the existing encrypted checkpoint and fresh planning/authorization, never a restored live ticket.
+
+Spotify guidance distinguishes an actual Windows media-session route for basic controls from registered-app Web API catalog access. Hext has no bundled registered Client ID. The provider receives official documentation references and can read them using the existing public web executor. Desktop PKCE uses a public Client ID, never a Client Secret. Login uses the existing official OAuth path and verifies its callback/result; opening a URL alone is not authentication.
+
+## Observed checks
+
+- The console suite passed: motion and presentation, desktop overlap/recovery, colors/materials, hardware, provider lifecycle/quoting, real read-only endpoint discovery, shortcuts, action schemas, native file operations, global modes, one-use grants, task bounds and fresh-process encrypted persistence. Windows could not reserve native test hotkeys in this desktop session; the conflict model passed.
+- Native conversational verification passed: normal no-code questions, invalid values, fabricated-value rejection, a valid public value mixed with prose, exactly one real timer effect, cancellation, secret-pattern redaction, neutral questions naming secret fields, malformed replies, pending approval invalidation/recreation, denial, ongoing participation and persisted paused-task discussion/cancellation.
+- Native chat and separate-process restart passed. Historical controls remained inactive, and resumed effects required a fresh approval. Native permission, personal controller and renderer suites passed, including denied sensitive disclosure and immutable installation consent.
+- The actual authenticated protected Codex answered initial guidance and non-code questions, investigated availability, rejected an invalid fixture value, interpreted mixed prose with the valid public code, configured the native verification adapter once, resumed the same task and started exactly one actual timer. Natural-language cancellation reached the native internal control tool. This is a labeled native adapter test, not simulated external account authentication.
+- Actual Codex Spotify guidance passed: the Windows media-session check reported no compatible player, all three official Spotify documents were read successfully, and the provider explained registration/PKCE alternatives without changing credentials or claiming login. The harness approved only the specific native session check and three exact public documentation URLs through the real Always Ask gate. No playback or account login occurred.
+- A live documentation check exposed an overly small transport/output budget. Public documents now have a 512 KiB response bound with a separate bounded output allowance; model text remains capped at 16,000 UTF-8 bytes. A real child-process regression verifies that ordinary 64 KiB output still truncates and an explicit document budget captures its 200,000-byte fixture. No terminal output limit was widened.
+- Native Direct2D frames were exported and inspected. The conversation and composer remain visible; restoring the pending component updates its previous position. No desktop capture was used.
+
+## Remaining account and platform requirements
+
+Fresh Spotify account OAuth approval and playback on an eligible account/device were not established. Protected Claude execution was not established. Provider authentication/compatibility, official app registration where needed, external account eligibility and Windows authorization remain real prerequisites. No account creation, consent bypass, borrowed Client ID or simulated successful login is included. Recognized-secret redaction is defense in depth, not a universal secret detector; use official login flows for credentials.

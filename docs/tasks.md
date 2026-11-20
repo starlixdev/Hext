@@ -78,3 +78,9 @@ Use owned service objects with a lifetime covering their callbacks. Credentials 
 The [MCP tools specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) informed the catalog/schema separation. Hext does not currently load arbitrary MCP servers. The provider's own MCP/apps/shell integrations remain disabled; future transports must pass through the host's permission and credential boundaries.
 
 See [Assistant setup](assistant.md), [development checks](development.md), and [0.11.0 verification](verification-0.11.0.md).
+
+## Questions during participation
+
+A clarification temporarily retains the original stage, pending request and remaining queue. It uses the existing provider loop, tool registry, execution gate and receipts. After an answer, native readiness is checked again before restoring that exact request. Consent tickets are revoked during clarification and recreated when still necessary; model text cannot approve an action. A helper failure or invalid public value leaves the original task available. Cancellation clears the pending continuation; amendments replan through the same gate. During an ongoing native operation, conversational replies cannot dispatch unrelated effects.
+
+Encrypted checkpoints retain bounded safe waiting-context metadata. Restart does not restore execution authority or automatically replay interrupted effects. A paused task can be discussed before explicit resumption; resumption verifies current state and creates fresh approvals.

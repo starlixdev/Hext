@@ -31,8 +31,8 @@ ChatCardContent personalChatContent(const ChatMessage& message){
             else if(personal.spotifyPage==2){for(int i=0;i<4&&personal.listPage*4+i<static_cast<int>(state.devices.size());i++){auto& device=state.devices[personal.listPage*4+i];out.buttons.emplace_back(3150+i,hext::wide(device.value("name","")+(device.value("restricted",true)?" · Restrito":"")));out.targets[3150+i]=device.value("id","");}if(state.devices.size()>4){add(3098,L"Anterior");add(3099,L"Próximos");out.body+=L"\nPágina "+std::to_wstring(personal.listPage+1)+L" de "+std::to_wstring((state.devices.size()+3)/4);}}
             else{
                 if(personal.setupReason=="desktop-player")add(3317,L"Abrir Spotify");
-                add(3310,hext::SpotifyService::validClient(personal.spotify.clientID())?state.credentials?L"Verificar conexão":L"Abrir login":L"Configurar conexão");
-                add(3080,L"Editar Client ID");add(3316,L"Configuração oficial");
+                add(3310,hext::SpotifyService::validClient(personal.spotify.clientID())?state.credentials?L"Verificar conexão":L"Abrir login":L"Ver opções de conexão");
+                add(3080,L"Ajuda para conectar");add(3316,L"Abrir página oficial");
             }
         }else{
             out.body+=L"\n"+hext::wide(personalCapabilityState(id).value("status",""));

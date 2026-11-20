@@ -46,6 +46,7 @@ bool personalRequireSetup(const hext::ActionRequest& request){
     auto definition=hext::toolRegistry().find(request.name);
     if(definition&&personal.adapters.count(definition->capability)&&!personalCapabilityState(definition->capability).value("ready",false)){personal.task.suspend(request,definition->capability);personal.capability=definition->capability;personal.requestActive=true;personalShow(PersonalView::Setup);return true;}
     if(request.name=="capabilities.connect"){
+        if(request.args.value("id","")=="spotify"&&hext::SpotifyService::validClient(personal.spotify.clientID()))return false;
         auto state=personalCapabilityState(request.args["id"]);if(state.value("available",false)&&!state.value("ready",false)){personal.task.suspend(request,request.args["id"]);personal.capability=request.args["id"];personal.requestActive=true;personalShow(PersonalView::Setup);return true;}return false;
     }
     if(request.category!=hext::Category::Spotify||personal.spotify.snapshot().connected)return false;
@@ -122,7 +123,7 @@ bool personalResourceAction(const hext::ActionRequest& request){
             const std::map<std::string,std::wstring> pages={{"sound",L"ms-settings:sound"},{"bluetooth",L"ms-settings:bluetooth"},{"display",L"ms-settings:display"},{"apps",L"ms-settings:appsfeatures"},{"privacy",L"ms-settings:privacy"},{"windows_update",L"ms-settings:windowsupdate"}};
             auto code=reinterpret_cast<INT_PTR>(ShellExecuteW(windowHandle,L"open",pages.at(a["page"]).c_str(),nullptr,nullptr,SW_SHOWNORMAL));personalReceipt(request,code>32,code>32?L"Página oficial de configurações aberta. Nenhum ajuste foi alterado automaticamente.":L"O Windows não abriu esta página.");return true;
         }
-        if(name=="capabilities.inspect"){auto state=personalCapabilityState(a["id"]);personalReceipt(request,state.value("available",false),hext::wide(state.value("status","")),state);return true;}
+        if(name=="capabilities.inspect"){auto state=personalCapabilityState(a["id"]);personalReceipt(request,state.value("available",false),hext::wide(state.value("status","")),personalConfigurationInfo(a["id"]));return true;}
         if(name=="capabilities.connect"){
             auto state=personalCapabilityState(a["id"]);if(!state.value("available",false)){personalReceipt(request,false,L"Não há um adaptador confiável instalado para este recurso. Nenhum componente foi baixado.");return true;}
             if(state.value("ready",false)){personalReceipt(request,true,L"O recurso já está disponível.",state);return true;}

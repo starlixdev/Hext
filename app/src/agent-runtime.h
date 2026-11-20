@@ -26,6 +26,8 @@ bool personalCheckpoint(){
         for(auto it=conversation.rbegin();it!=conversation.rend()&&recent.size()<30;++it){auto row=personalMessageRecord(*it,true);auto size=row.dump().size();if(bytes+size>100000)break;bytes+=size;recent.push_back(std::move(row));}std::reverse(recent.begin(),recent.end());for(auto& message:recent)messages.push_back(message);
         hext::Json resources=hext::Json::object();for(auto& resource:personal.resources)resources[resource.first]=resource.second;
         hext::Json record={{"task",personal.task.checkpoint()},{"chat",personal.chat},{"title",personal.title},{"messages",messages},{"resources",resources}};auto digest=record.dump();
+        if(personal.continuation||personal.discussionOnly)record["waiting_context"]=personalPendingContext();
+        digest=record.dump();
         if(digest==personal.checkpointDigest)return true;
         if(personal.store.get("task",personal.chat).is_null()&&personal.store.count("task")>=20)throw std::runtime_error("Pending task limit");
         personal.store.transaction([&]{personal.store.put("task",personal.chat,record);personal.store.put("settings","last-chat",{{"chat",personal.chat}});});personal.checkpointDigest=std::move(digest);personal.checkpointFailed=false;return true;
@@ -37,15 +39,17 @@ void personalPauseTask(){
     if(!personal.inlineID.empty())for(auto& message:conversation)if(message.card.is_object()&&message.card.value("id","")==personal.inlineID)message.card["state"]="paused";
     if(personalCheckpoint())personal.preserveCheckpoint=true;
 }
-void personalRestoreTask(const std::string& id){
+void personalRestoreTask(const std::string& id,bool start){
     auto record=personal.store.get("task",id);hext::TaskSession restored;
     if(!record.is_object()||!record.contains("task")||!restored.restore(record["task"])||restored.chat!=id||record.value("chat","")!=id||!record.contains("messages")||!record["messages"].is_array()||record["messages"].size()>30)throw std::runtime_error("Invalid task checkpoint");
     std::vector<ChatMessage> messages;for(auto& row:record["messages"]){auto message=personalRestoreMessage(row,true);if(message.card.is_object()&&message.card.value("chat","")!=id)message.card=nullptr;messages.push_back(std::move(message));}
     personalPauseTask();personalRevoke();personal.chat=id;personal.title=record.value("title","Tarefa retomada");personal.saved=personal.store.get("chat",id).is_object();personal.dirty=true;conversation=std::move(messages);personal.task=std::move(restored);personal.resources.clear();
+    if(record.contains("waiting_context")&&record["waiting_context"].is_object()&&record["waiting_context"].dump().size()<16384)personal.resumeContext=record["waiting_context"];
     if(record.contains("resources")&&record["resources"].is_object()&&record["resources"].size()<=100)for(auto it=record["resources"].begin();it!=record["resources"].end();++it)if(it.key().size()<=64&&it.value().is_object())personal.resources[it.key()]=it.value();
     // Approval, UI window handles and authentication state never survive restart.
     personal.gate.revoke();personal.approval.reset();personal.queued.clear();personal.windows.clear();personal.windowScopes.clear();personal.snapshots.clear();personal.task.resumePlanning();personal.task.plan();personal.requestChat=personal.chat;personal.requestActive=true;personal.followUp=false;personal.view=PersonalView::None;personal.checkpointDigest.clear();
     personalAppend(false,L"Tarefa retomada. Autorizações antigas foram descartadas; etapas interrompidas serão verificadas antes de continuar.",true);
+    if(!start){personal.task.stage=hext::TaskStage::Paused;personal.requestActive=false;return;}
     if(!assistantConfigured()){personal.task.stage=hext::TaskStage::Setup;personal.task.capability=personal.capability="provider";personalShow(PersonalView::Setup);}else personalRunProvider();
 }
 void personalAgentCleanup(){
@@ -126,6 +130,7 @@ void personalAgentPoll(){
             return;
         }
         if(personal.agentOwned&&personal.inFlight&&personal.requestChat==personal.chat){auto request=*personal.inFlight;personal.agentOwned=false;auto result=*completed;bool success=result.value("success",false);
+            if(request.name=="browser.open_url"){auto code=success?reinterpret_cast<INT_PTR>(ShellExecuteW(windowHandle,L"open",hext::wide(request.args["url"]).c_str(),nullptr,nullptr,SW_SHOWNORMAL)):0;personalReceipt(request,code>32,code>32?L"Página pública enviada ao navegador. Login e carregamento não foram confirmados.":L"Endereço recusado ou navegador indisponível.",{{"launch_accepted",code>32},{"authenticated",false},{"page_loaded",false}});personalNext();return;}
             if(!success&&result.value("requires_setup","")=="packages"){personal.packagesVerified=false;personalSuspendRejected(request,"packages","dependency");return;}
             if(success&&request.name.rfind("packages.",0)==0)personal.packagesVerified=true;
             if(request.name=="computer.inspect"&&success){if(personal.snapshots.size()>=8)personal.snapshots.erase(personal.snapshots.begin());auto id=hext::randomID();personal.snapshots[id]={{"window",request.args["window"]},{"elements",result["elements"]},{"expires",GetTickCount64()+180000}};result["snapshot"]=id;}

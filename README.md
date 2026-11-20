@@ -63,6 +63,8 @@ Choose **Sempre Perguntar**, **Aprovar por mim**, or **Permitir Sempre** in **Pe
 
 Read [Tasks and capabilities](docs/tasks.md), [Assistant setup](docs/assistant.md), [Hardware readings](docs/hardware.md), [Architecture](docs/architecture.md), and [Contributing](CONTRIBUTING.md) for details.
 
+Setup stays conversational: ask questions, provide a public configuration value in prose, change the request or cancel without leaving the chat. The same task and native authorization gate remain responsible for continuation. See [conversational setup verification](docs/verification-0.13.0.md).
+
 ## License and credits
 
 Hext is distributed under [GPL-3.0-or-later](LICENSE). See [Third-party notices](THIRD_PARTY_NOTICES.md) for SQLite, JSON, and historical redistribution credits. Apple motion guidance and Kobi informed the interaction design. Hext uses Windows fonts and icons, and is not affiliated with Apple, Kobi, OpenAI, Anthropic, or Spotify.
