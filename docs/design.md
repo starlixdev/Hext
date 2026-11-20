@@ -8,6 +8,8 @@ Toggles use a consistent 36 by 20 logical-pixel size. Labels sit beside them ins
 
 Permission cards align the visible left edges of the title and description and center both lines as a single group. The selection check is centered vertically with matching side padding, and all card content follows the press motion. The explanatory footer uses smaller type aligned with the card text.
 
+Assistant requests are native cards in the chat scroll flow, alongside messages. They preserve the header, composer and earlier context rather than replacing the conversation. Titles, explanations, action rows and completed-state labels share the existing spacing/material/control styles. Arrival uses a short damped spring with scale/press behavior from existing buttons; reduced motion snaps it. Details expand inside the same scroll flow, and clipped or historical controls cannot receive input.
+
 The system uses installed Segoe fonts and Fluent/MDL2 glyphs. High contrast, disabled transparency, and reduced motion have explicit alternatives. Material is a wallpaper approximation, not a live macOS vibrancy implementation.
 
 References: [Apple motion guidance](https://developer.apple.com/design/human-interface-guidelines/motion), [Animate with springs](https://developer.apple.com/videos/play/wwdc2023/10158/), [SwiftUI animation](https://developer.apple.com/videos/play/wwdc2023/10156/), [Dynamic Live Activities](https://developer.apple.com/videos/play/wwdc2023/10194/), and [Materials](https://developer.apple.com/design/human-interface-guidelines/materials). These inform behavior; the implementation uses Windows APIs.

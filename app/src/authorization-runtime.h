@@ -33,7 +33,7 @@ hext::ActionRequest personalRefineAction(const hext::ActionRequest& proposed){
 }
 void personalRequestConsent(const hext::ActionRequest& request){
     personal.review.reset();personal.approval=personal.gate.propose(personal.preferences,request,personal.chat);
-    if(personal.task.managed)personal.task.stage=hext::TaskStage::Approval;
+    if(personal.task.managed){personal.task.stage=hext::TaskStage::Approval;personal.task.waiting=request;}
     personal.requestActive=true;personalShow(PersonalView::Action);assistantStatus=L"Aguardando sua autorização.";
 }
 void personalCancelReview(){

@@ -24,6 +24,7 @@ Change both global shortcuts in **Personalizar → Geral**. Hext checks whether 
 
 - Structured assistant actions with three global permission modes, one-use approvals, and protected Codex/Claude adapters. A compatible installed CLI and its own authentication are required; arbitrary text CLIs cannot run the protected protocol.
 - Task planning across tool results, independent AI action review, on-demand configuration inside a conversation, an internal capabilities registry, and reviewed declarative skills. There is no capabilities settings catalog to manage.
+- Native chat components for permission decisions, assisted setup, participation, progress and task resumption. The conversation remains visible; historical controls never restore execution authority.
 - General agent tools: isolated PowerShell, public HTTPS research, authorized Windows accessibility controls, explicit package proposals, and durable task checkpoints. See [general agent boundaries](docs/agent.md).
 - Encrypted saved conversations, separate bounded preference memory, and configurable response language.
 - Optional Spotify PKCE connection, text search, device selection, and playback controls, subject to Spotify account and application access.

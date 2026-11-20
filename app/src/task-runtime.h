@@ -58,7 +58,7 @@ void personalResumeTask(){
     if(pending&&pending->nativeTarget=="spotify"&&!personal.nativeSpotifyReady)return;
     if(id=="spotify"&&pending&&(pending->name=="spotify.play"||pending->name=="spotify.search"||pending->name=="spotify.set_volume")&&!personal.spotify.snapshot().connected)return;
     if(!personalCapabilityState(id).value("ready",false))return;
-    personal.task.waiting.reset();personal.task.stage=hext::TaskStage::Executing;personal.preparing=false;personal.setupReason.clear();personal.view=PersonalView::None;personal.requestActive=true;
+    personalResolveInline("completed");personal.task.waiting.reset();personal.task.stage=hext::TaskStage::Executing;personal.preparing=false;personal.setupReason.clear();personal.view=PersonalView::None;personal.requestActive=true;
     if(pending){personal.queued.insert(personal.queued.begin(),*pending);personalNext();}else if(id=="provider")personalRunProvider();
     invalidate(180);
 }
@@ -164,7 +164,7 @@ void personalTaskAction(int id){
     if(id>=3400){personalAgentUIAction(id);return;}
     if(id==3310)personalPrepare();
     else if(id==3313)personalImportSkill();
-    else if(id==3314){if(personal.skillDraft.is_object()&&personal.skills.add(personal.skillDraft)){personal.store.put("skill",personal.skillDraft["id"],{{"recipe",personal.skillDraft}});personal.skillDraft=nullptr;personal.view=PersonalView::None;personal.notice=L"Receita adicionada.";if(personal.inFlight&&personal.inFlight->name=="skills.import"){auto request=*personal.inFlight;personal.task.stage=hext::TaskStage::Executing;personalReceipt(request,true,L"Receita verificada e adicionada.");personalNext();}}else personal.notice=L"Não foi possível adicionar esta skill.";}
+    else if(id==3314){if(personal.skillDraft.is_object()&&personal.skills.add(personal.skillDraft)){personal.store.put("skill",personal.skillDraft["id"],{{"recipe",personal.skillDraft}});personalResolveInline("completed");personal.skillDraft=nullptr;personal.view=PersonalView::None;personal.notice=L"Receita adicionada.";if(personal.inFlight&&personal.inFlight->name=="skills.import"){auto request=*personal.inFlight;personal.task.stage=hext::TaskStage::Executing;personalReceipt(request,true,L"Receita verificada e adicionada.");personalNext();}}else personal.notice=L"Não foi possível adicionar esta skill.";}
     else if(id==3315){personal.capability=personal.task.capability;personalShow(PersonalView::Setup);personalResumeTask();}
     else if(id==3316){if(!testMode&&personal.capability=="spotify")ShellExecuteW(windowHandle,L"open",L"https://developer.spotify.com/dashboard",nullptr,nullptr,SW_SHOWNORMAL);}
     else if(id==3318){auto native=personal.adapters.find(personal.capability);if(native!=personal.adapters.end()&&native->second.publicConfiguration&&native->second.configure){auto field=native->second.publicConfiguration();personalEditor("resource-config",field.first,hext::wide(field.second),personal.capability);}}

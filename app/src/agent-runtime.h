@@ -23,23 +23,24 @@ bool personalCheckpoint(){
     try{
         if(!personal.task.active()&&personal.task.stage!=hext::TaskStage::Paused&&personal.task.stage!=hext::TaskStage::Blocked){if(!personal.checkpointDigest.empty())personal.store.erase("task",personal.task.chat);personal.checkpointDigest.clear();return true;}
         hext::Json messages=hext::Json::array();size_t bytes=0;std::vector<hext::Json> recent;
-        for(auto it=conversation.rbegin();it!=conversation.rend()&&recent.size()<30;++it){auto value=hext::utf8(it->text);if(bytes+value.size()>100000)break;bytes+=value.size();recent.push_back({{"user",it->user},{"tool",it->tool},{"model_only",it->modelOnly},{"text",value}});}std::reverse(recent.begin(),recent.end());for(auto& message:recent)messages.push_back(message);
+        for(auto it=conversation.rbegin();it!=conversation.rend()&&recent.size()<30;++it){auto row=personalMessageRecord(*it,true);auto size=row.dump().size();if(bytes+size>100000)break;bytes+=size;recent.push_back(std::move(row));}std::reverse(recent.begin(),recent.end());for(auto& message:recent)messages.push_back(message);
         hext::Json resources=hext::Json::object();for(auto& resource:personal.resources)resources[resource.first]=resource.second;
         hext::Json record={{"task",personal.task.checkpoint()},{"chat",personal.chat},{"title",personal.title},{"messages",messages},{"resources",resources}};auto digest=record.dump();
         if(digest==personal.checkpointDigest)return true;
         if(personal.store.get("task",personal.chat).is_null()&&personal.store.count("task")>=20)throw std::runtime_error("Pending task limit");
-        personal.store.put("task",personal.chat,record);personal.checkpointDigest=std::move(digest);personal.checkpointFailed=false;return true;
+        personal.store.transaction([&]{personal.store.put("task",personal.chat,record);personal.store.put("settings","last-chat",{{"chat",personal.chat}});});personal.checkpointDigest=std::move(digest);personal.checkpointFailed=false;return true;
     }catch(...){personal.checkpointFailed=true;assistantStatus=L"Não foi possível guardar a tarefa. A execução foi interrompida antes de novas ações.";return false;}
 }
 void personalPauseTask(){
     if(!personal.task.managed||(!personal.task.active()&&personal.task.stage!=hext::TaskStage::Blocked&&personal.task.stage!=hext::TaskStage::Paused))return;
     personal.task.stage=hext::TaskStage::Paused;
+    if(!personal.inlineID.empty())for(auto& message:conversation)if(message.card.is_object()&&message.card.value("id","")==personal.inlineID)message.card["state"]="paused";
     if(personalCheckpoint())personal.preserveCheckpoint=true;
 }
 void personalRestoreTask(const std::string& id){
     auto record=personal.store.get("task",id);hext::TaskSession restored;
     if(!record.is_object()||!record.contains("task")||!restored.restore(record["task"])||restored.chat!=id||record.value("chat","")!=id||!record.contains("messages")||!record["messages"].is_array()||record["messages"].size()>30)throw std::runtime_error("Invalid task checkpoint");
-    std::vector<ChatMessage> messages;for(auto& row:record["messages"]){if(!hext::textField(row,"text",100000,true))throw std::runtime_error("Invalid task context");messages.push_back({row.value("user",false),hext::wide(row["text"]),row.value("tool",false),row.value("model_only",false)});}
+    std::vector<ChatMessage> messages;for(auto& row:record["messages"]){auto message=personalRestoreMessage(row,true);if(message.card.is_object()&&message.card.value("chat","")!=id)message.card=nullptr;messages.push_back(std::move(message));}
     personalPauseTask();personalRevoke();personal.chat=id;personal.title=record.value("title","Tarefa retomada");personal.saved=personal.store.get("chat",id).is_object();personal.dirty=true;conversation=std::move(messages);personal.task=std::move(restored);personal.resources.clear();
     if(record.contains("resources")&&record["resources"].is_object()&&record["resources"].size()<=100)for(auto it=record["resources"].begin();it!=record["resources"].end();++it)if(it.key().size()<=64&&it.value().is_object())personal.resources[it.key()]=it.value();
     // Approval, UI window handles and authentication state never survive restart.
@@ -130,7 +131,7 @@ void personalAgentPoll(){
             if(request.name=="computer.inspect"&&success){if(personal.snapshots.size()>=8)personal.snapshots.erase(personal.snapshots.begin());auto id=hext::randomID();personal.snapshots[id]={{"window",request.args["window"]},{"elements",result["elements"]},{"expires",GetTickCount64()+180000}};result["snapshot"]=id;}
             if(request.name=="packages.inspect"&&success){if(personal.proposals.size()>=8)personal.proposals.erase(personal.proposals.begin());personal.proposals[result["proposal"]]=result;}
             bool recoverable=!success&&result.value("recoverable",false)&&!result.value("uncertain",false);
-            if(personal.view==PersonalView::Intervention)personal.view=PersonalView::None;
+            if(personalInteractionIs(PersonalView::Intervention))personal.view=PersonalView::None;
             personalReceipt(request,success,success?request.name=="computer.act"&&!result.value("verified",false)?L"A interface aceitou a ação. O resultado final ainda precisa ser observado.":L"Etapa nativa concluída; resultado disponível para verificação.":hext::wide(result.value("error","A etapa falhou. Consulte o resultado antes de tentar outra abordagem.")),result);
             if(recoverable&&personal.task.managed&&!personal.preferences.blocked){personal.task.stage=hext::TaskStage::Executing;personal.followUp=true;}
             personalNext();
@@ -148,15 +149,16 @@ std::wstring personalOperationDetails(){
 void personalAgentUIAction(int id){
     if(id==3420){personal.rows=personal.store.list("task",20);personalShow(PersonalView::Tasks);}
     else if(id>=3430&&id<3434){int index=personal.listPage*4+id-3430;if(index<static_cast<int>(personal.rows.size()))personalRestoreTask(personal.rows[index].value("id",""));}
-    else if(id==3423){personalPauseTask();personalRevoke();personal.view=PersonalView::None;assistantStatus=L"Tarefa pausada. Você pode retomá-la em Tarefas pendentes.";}
-    else if(id==3440){personal.reviewPage=0;personalShow(PersonalView::OperationReview);}
+    else if(id==3423){personalPauseTask();personalRevoke();personal.view=PersonalView::None;personalOfferResume();assistantStatus=L"Tarefa pausada. Retome quando quiser pela conversa.";}
+    else if(id==3440){if(!personal.inlineID.empty()){personal.inlineDetails=!personal.inlineDetails;}else{personal.reviewPage=0;personalShow(PersonalView::OperationReview);}}
     else if(id==3441)personal.reviewPage=std::max(0,personal.reviewPage-1);
     else if(id==3442)personal.reviewPage=std::min(static_cast<int>(personalOperationDetails().size()/650),personal.reviewPage+1);
     else if(id==3443)personalShow(PersonalView::Action);
     else if(id==3450){
+        if(!personalInteractionIs(PersonalView::WindowConsent)||!personal.task.waiting)return;
         auto found=personal.windows.find(personal.pendingWindow);if(found==personal.windows.end()||!hext::validAgentWindow(found->second)){personal.notice=L"A janela mudou ou foi fechada.";return;}
         if(personal.windowScopes.size()>=8){personal.notice=L"Revogue janelas anteriores antes de autorizar outra.";return;}
-        personal.windowScopes.insert(personal.pendingWindow);auto pending=personal.task.waiting;personal.task.waiting.reset();personal.task.stage=hext::TaskStage::Executing;personal.view=PersonalView::None;
+        personal.windowScopes.insert(personal.pendingWindow);auto pending=personal.task.waiting;personalResolveInline("approved");personal.task.waiting.reset();personal.task.stage=hext::TaskStage::Executing;personal.view=PersonalView::None;
         if(pending){auto request=personalRefineAction(*pending);auto ticket=personal.gate.propose(personal.preferences,request,personal.chat);auto approved=personal.gate.consume(ticket.nonce,personal.preferences,personal.chat);if(approved)personalExecute(*approved,hext::ExecutionAuthority::User);personalNext();}
     }
     else if(id==3460){personalRevoke();personal.notice=L"Autorizações de janelas revogadas.";}

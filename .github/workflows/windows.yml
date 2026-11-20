@@ -51,6 +51,13 @@ jobs:
           if (-not $taskVerify.WaitForExit(90000)) { throw 'Authorization verification timed out' }
           Get-Content app/dist/authorization-verification.txt
           if ($taskVerify.ExitCode -ne 0) { throw 'Authorization verification failed' }
+      - name: Verify interactive chat and restart recovery
+        run: |
+          $taskVerify = Start-Process app/dist/Hext-preview.exe -ArgumentList '--verify-chat' -WindowStyle Hidden -PassThru
+          if (-not $taskVerify.WaitForExit(120000)) { throw 'Chat verification timed out' }
+          Get-Content app/dist/chat-verification.txt
+          Get-Content app/dist/chat-restart-verification.txt
+          if ($taskVerify.ExitCode -ne 0) { throw 'Chat verification failed' }
       - uses: actions/upload-artifact@v4
         with:
           name: Hext-Windows-x64
@@ -60,6 +67,8 @@ jobs:
             app/dist/verification.txt
             app/dist/personal-verification.txt
             app/dist/authorization-verification.txt
+            app/dist/chat-verification.txt
+            app/dist/chat-restart-verification.txt
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -68,6 +77,8 @@ jobs:
             app/dist/verification.txt
             app/dist/personal-verification.txt
             app/dist/authorization-verification.txt
+            app/dist/chat-verification.txt
+            app/dist/chat-restart-verification.txt
           if-no-files-found: ignore
   publish:
     needs: build
@@ -93,7 +104,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             $taskAssets = Get-ChildItem release/app -Recurse -File | Where-Object {$_.Name -in @('Hext-Windows-x64.zip','SHA256SUMS.txt')}
             if ($taskAssets.Count -ne 2) { throw 'Release assets are missing' }
-            $taskNotes = "Refined the permission settings layout: centered each title/description block, aligned their visible left edges, centered the selected checkmark with consistent padding, and reduced the explanatory footer text. Card contents follow the existing press animation. The three global authorization modes, native safeguards, chats and memory retain their existing behavior. See docs/design.md for layout conventions and docs/verification-0.11.0.md for the authorization architecture's validated flows and account/platform limits."
+            $taskNotes = "Moved authorization, assisted setup and participation into native interactive chat messages. The conversation and composer remain available; host-owned buttons update after decisions and cannot approve another step through repeated clicks. Configuration resumes the original task after readiness checks. Encrypted pending context restores with inactive historical controls and fresh authorization on explicit inline resumption. The three global permission modes and native safeguards remain in force. See docs/verification-0.12.0.md for native/restart/Codex validation and account-dependent limits."
             gh release create "v$taskVersion" $taskAssets.FullName --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Hext $taskVersion" --notes $taskNotes --latest
             if ($LASTEXITCODE -ne 0) { throw 'Could not publish Hext' }
           }

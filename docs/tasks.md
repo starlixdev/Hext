@@ -26,6 +26,8 @@ Codex structured responses are decoded from complete JSON stream events. A valid
 
 A missing registered capability suspends its exact pending request and preserves the remaining queue and original goal. The conversation displays the relevant setup card. Local checks and fields are prepared by Hext; selecting a file, authenticating, granting consent, or supplying a platform-required public identifier remains the user's responsibility.
 
+Setup, approvals, window-reading consent, user participation, skill review and memory proposals are native messages in the same scrollable conversation. They do not replace the chat. Public configuration uses the composer, and details expand in the message flow. Decisions resolve the host-owned component and invalidate its buttons; repeated clicks cannot authorize a following step. Paused/expired work offers inline resumption with fresh authorization after state checks. Official login/OS chooser windows remain external where their platform requires it.
+
 After readiness is confirmed, Hext reinserts the pending step and evaluates current permissions again. Configuration does not grant execution permission. Old approval tickets are not reused. Canceling, changing conversations, revoking permissions, or disconnecting cancels pending work and prevents late worker results from being attached to another conversation.
 
 Provider setup can also begin from a message: the request remains while the user selects/connects Codex or Claude. A configured provider resumes planning without another copy of the request. A registered desktop executable that changed after authorization requires fresh authorization in the native chooser, then resumes the original launch request.

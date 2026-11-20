@@ -82,7 +82,7 @@ void iconButton(int id,wchar_t glyph,const std::wstring& name,float x,float y,fl
     canvas->SetTransform(original);hit(id,x,y,w,h,name);
 }
 void drawSendButton(){
-    bool busy=personalBusy();
+    bool busy=personalBusy()&&!personalEditing()&&assistantInput.empty();
     if(sendState.target!=(busy?1:0)){sendState.target=busy?1:0;sendState.frequency=45;invalidate(180);}
     if(motionReduced())sendState.snap(sendState.target);
     iconButton(451,0,busy?L"Interromper resposta":L"Enviar mensagem",668,372,38,38,true);
@@ -160,7 +160,7 @@ void drawAssistantInput(){
     canvas->PushAxisAlignedClip(D2D1::RectF(217,378,641,405),D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     if(selectAll&&assistantFocused&&!assistantInput.empty())
         box(218-assistantTextScroll,379,metrics.widthIncludingTrailingWhitespace,23,0x586B98,2,.7f);
-    if(assistantInput.empty())text(personal.view==PersonalView::Editor?L"Digite aqui…":L"Mensagem…",218,381,422,14,0xB7B7C1);
+    if(assistantInput.empty())text(personalEditing()?L"Digite aqui…":L"Mensagem…",218,381,422,14,0xB7B7C1);
     else if(layout){use(0xEEEEF4);canvas->DrawTextLayout(D2D1::Point2F(218-assistantTextScroll,381),layout,brush);}
     lastAssistantCaretX=218+caretX-assistantTextScroll;
     if(assistantFocused&&assistantCaretVisible&&!selectAll)
@@ -171,6 +171,7 @@ void drawAssistantInput(){
 void settingsChoice(int,const std::wstring&,const std::wstring&,float);
 void drawToggle(int,bool,float,float,float,float,bool);
 #include "personal-ui.h"
+#include "chat-ui.h"
 void drawHome(){
     if(personal.view!=PersonalView::None){drawPersonalOverlay();return;}
     text(L"Assistant",204,87,380,21,0xF5F5F8,true);
@@ -187,6 +188,7 @@ void drawHome(){
         float total=0;
         for(auto& message:conversation){
             if(message.modelOnly){layouts.push_back(nullptr);heights.push_back(0);continue;}
+            if(message.card.is_object()){float h=drawChatCard(message,0,true);total+=h;layouts.push_back(nullptr);heights.push_back(h);continue;}
             IDWriteTextLayout* layout=nullptr;DWRITE_TEXT_METRICS metrics{};
             textFactory->CreateTextLayout(message.text.c_str(),static_cast<UINT32>(message.text.size()),font(14,false),476,100000,&layout);
             if(layout){layout->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);layout->GetMetrics(&metrics);}
@@ -197,6 +199,7 @@ void drawHome(){
         canvas->PushAxisAlignedClip(D2D1::RectF(204,129,712,351),D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
         for(size_t i=0;i<conversation.size();i++){
             if(conversation[i].modelOnly)continue;
+            if(conversation[i].card.is_object()){drawChatCard(conversation[i],y,false);y+=heights[i];continue;}
             text(conversation[i].user?L"Você":conversation[i].tool?L"Hext":L"Assistant",212,y,476,11,0xB7B7C1,true);
             if(layouts[i]){use(0xEEEEF4);canvas->DrawTextLayout(D2D1::Point2F(212,y+21),layouts[i],brush);}
             y+=heights[i];release(layouts[i]);
@@ -205,9 +208,8 @@ void drawHome(){
     }
     drawAssistantInput();
     drawSendButton();
-    text(assistantStatus,212,433,personal.task.active()?personal.task.stage==hext::TaskStage::Setup?292:390:492,12,0xB7B7C1);
-    if(personal.task.active()&&personal.task.stage==hext::TaskStage::Setup)button(3315,L"Continuar configuração",516,429,196,30,true);
-    else if(personal.task.active()){button(3423,L"Pausar",624,429,88,30);}
+    text(assistantStatus,212,433,personal.task.active()?390:492,12,0xB7B7C1);
+    if(personal.task.active())button(3423,L"Pausar",624,429,88,30);
 }
 void drawTimer(){
     text(L"Temporizador",204,87,500,21,0xF5F5F8,true);
@@ -844,6 +846,7 @@ void render(){
     notifyAccessibility();
 }
 void stepMotion(double seconds){
+    personal.inlineReveal.step(seconds);
     personal.transition.step(seconds);
     for(auto* s:{&width,&height,&reveal,&pageFade,&appearance,&navPosition,&settingsFade,&colorPickerMotion,&sendState,&popoverMotion,&tooltipMotion,
                  &timerX,&timerY,&timerSize,&timerSymbol,&timerButtonX,&timerButtonY,&timerButtonW,&timerButtonH,
@@ -854,6 +857,7 @@ void stepMotion(double seconds){
     for(auto& item:numberMotion)item.second.progress.step(seconds);
 }
 bool motionBusy(){
+    if(personal.inlineReveal.moving())return true;
     if(personal.transition.moving())return true;
     for(auto* s:{&width,&height,&reveal,&pageFade,&appearance,&navPosition,&settingsFade,&colorPickerMotion,&sendState,&popoverMotion,&tooltipMotion,
                  &timerX,&timerY,&timerSize,&timerSymbol,&timerButtonX,&timerButtonY,&timerButtonW,&timerButtonH,
@@ -866,6 +870,7 @@ bool motionBusy(){
 }
 void snapMotion(){
     personal.transition.snap(personal.transition.target);
+    personal.inlineReveal.snap(personal.inlineReveal.target);
     for(auto* s:{&width,&height,&reveal,&pageFade,&appearance,&navPosition,&settingsFade,&colorPickerMotion,&sendState,&popoverMotion,&tooltipMotion,
                  &timerX,&timerY,&timerSize,&timerSymbol,&timerButtonX,&timerButtonY,&timerButtonW,&timerButtonH,
                  &volumeVisual,&cpuVisual,&ramVisual,&soundTabVisual,&soundPageFade})s->snap(s->target);

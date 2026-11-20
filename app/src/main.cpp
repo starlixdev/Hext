@@ -34,6 +34,7 @@
 #include "color.h"
 #include "assistant.h"
 #include "personal-core.h"
+#include "chat-interaction.h"
 #include "personal-net.h"
 #include "personal-media.h"
 #include "task-engine.h"
@@ -88,7 +89,7 @@ bool assistantCaretVisible=false;
 size_t assistantCaret=0;
 float assistantTextScroll=0,lastAssistantCaretX=218;
 float assistantScroll=0,assistantScrollMax=0;
-struct ChatMessage{bool user;std::wstring text;bool tool=false,modelOnly=false;};
+struct ChatMessage{bool user;std::wstring text;bool tool=false,modelOnly=false;hext::Json card=nullptr;};
 std::vector<ChatMessage> conversation;
 #include "personal-state.h"
 int settingsSection=5,settingsReturnPage=0;
@@ -274,6 +275,7 @@ void hit(int id,float x,float y,float w,float h,const std::wstring& name=L""){
 }
 UINT accentForeground(){return hext::foreground(accent());}
 bool controlEnabled(int id){
+    if(id>=10000)return personalChatEnabled(id);
     if(id==3310)return personal.ready&&!personal.preparing&&!personal.spotify.busy()&&!(personal.capability=="provider"&&connectionState[assistantProvider]==hext::ConnectionState::Checking);
     if(id==3063)return personal.ready&&personal.preferences.memory;
     if(id==3080||id==3081||id==3083||id==3084||(id>=3085&&id<=3088)||(id>=3140&&id<3145)||(id>=3150&&id<3154))return personal.ready&&!personal.spotify.busy()&&!testMode;
@@ -727,7 +729,7 @@ bool assistantConfigured(){
 }
 void resetAssistantConnection(){
     auto pending=personal.task;bool preserve=pending.stage==hext::TaskStage::Setup&&pending.capability=="provider";
-    personalRevoke();
+    personalRevoke((personal.capability=="provider"&&(personal.inlineView==PersonalView::Setup||personal.inlineView==PersonalView::Connection))||personalResumeVisible());
     if(preserve){personal.task=pending;personal.requestActive=true;}
     if(probingProvider>0&&connectionState[probingProvider]==hext::ConnectionState::Checking)
         connectionState[probingProvider]=hext::ConnectionState::Disconnected;
@@ -819,7 +821,7 @@ const wchar_t* assistantConnectionMessage(){
     }
 }
 void sendAssistant(){
-    if(personal.view==PersonalView::Editor)personalCommitEditor();
+    if(personalEditing())personalCommitEditor();
     else personalSend();
 }
 void chooseAssistantExecutable(){
@@ -904,7 +906,7 @@ void executeCommand(){
 void action(int id){
     if(!controlEnabled(id))return;
     keyboardId=-1;
-    if(id>=3000&&id<3700)personalAction(id);
+    if((id>=3000&&id<3700)||id>=10000)personalAction(id);
     else if(id>=100&&id<107)changePage(id-100);
     else if(id>=1000)soundAction(id);
     else if(id>=600&&id<=605){
@@ -939,7 +941,8 @@ void action(int id){
     else if(id==450){assistantFocused=true;assistantCaret=assistantInput.size();resetAssistantCaret();inputFocused=false;keyboardId=450;selectAll=false;invalidate();}
     else if(id==451)sendAssistant();
     else if(id==452){if(!personalBusy()){personal.pendingChat.clear();if(conversation.empty())personalNew(true);else personalShow(PersonalView::NewChat);}invalidate();}
-    else if(id==460||id==461){changePage(5);settingsSection=3;settingsFade.snap(1);invalidate();}
+    else if(id==460){changePage(0);personal.capability="provider";personalShow(PersonalView::Connection);invalidate();}
+    else if(id==461){changePage(5);settingsSection=3;settingsFade.snap(1);invalidate();}
     else if(id==465){openSettingsMenu(465);invalidate();}
     else if(id==466)chooseAssistantExecutable();
     else if(id==467){
@@ -1990,6 +1993,7 @@ int recordMotion(const std::filesystem::path& directory){
 #include "personal-verification.h"
 #include "agent-verification.h"
 #include "authorization-verification.h"
+#include "chat-verification.h"
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     int workerArgumentCount=0;auto workerArguments=CommandLineToArgvW(GetCommandLineW(),&workerArgumentCount);
     bool desktopWorker=workerArguments&&workerArgumentCount==2&&std::wstring(workerArguments[1])==L"--agent-desktop-worker";
@@ -1998,10 +2002,13 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     bool personalCheck=std::wstring(arguments).find(L"--verify-personal")!=std::wstring::npos;
     bool agentCheck=std::wstring(arguments).find(L"--verify-agent")!=std::wstring::npos;
     bool authorizationCheck=std::wstring(arguments).find(L"--verify-permissions")!=std::wstring::npos;
+    bool chatCheck=std::wstring(arguments).find(L"--verify-chat")!=std::wstring::npos;
+    std::wstring chatRestart;auto restartOffset=std::wstring(arguments).find(L"--verify-chat-restart=");
+    if(restartOffset!=std::wstring::npos){chatRestart=std::wstring(arguments).substr(restartOffset+std::wstring(L"--verify-chat-restart=").size(),32);if(!hext::agentID(hext::utf8(chatRestart)))return 2;}
     bool recording=std::wstring(arguments).find(L"--record-motion")!=std::wstring::npos;
     bool connectionCheck=std::wstring(arguments).find(L"--verify-connection")!=std::wstring::npos;
     bool hardwareCheck=std::wstring(arguments).find(L"--verify-hardware")!=std::wstring::npos;
-    testMode=personalCheck||agentCheck||authorizationCheck||recording||connectionCheck||hardwareCheck||std::wstring(arguments).find(L"--verify-render")!=std::wstring::npos;
+    testMode=chatCheck||personalCheck||agentCheck||authorizationCheck||recording||connectionCheck||hardwareCheck||std::wstring(arguments).find(L"--verify-render")!=std::wstring::npos;
     HANDLE single=testMode?nullptr:CreateMutex(nullptr,FALSE,L"Local\\HextIsland");
     if(!testMode&&GetLastError()==ERROR_ALREADY_EXISTS){
         MessageBox(nullptr,L"O Hext já está aberto. Passe o mouse no centro superior da área de trabalho.",L"Hext",MB_OK);
@@ -2013,6 +2020,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     configPath=configPath.substr(0,configPath.find_last_of(L"\\/")+1)+L"hext.ini";
     wchar_t privateRoot[32768]{};GetEnvironmentVariableW(L"LOCALAPPDATA",privateRoot,32768);
     auto personalRoot=testMode?std::filesystem::path(configPath).parent_path()/(L"personal-fixture-"+std::to_wstring(GetCurrentProcessId())):std::filesystem::path(privateRoot)/L"Hext/assistant-data";
+    if(!chatRestart.empty())personalRoot=std::filesystem::path(configPath).parent_path()/(L"chat-restart-"+chatRestart);
     personalInitialize(personalRoot);
     auto setting=[](const wchar_t* key,int fallback){return static_cast<int>(GetPrivateProfileInt(L"Ilha",key,fallback,configPath.c_str()));};
     auto recent=accentPalette.recent;
@@ -2067,7 +2075,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
     }
     accessibleUI=new HextAccessible;
     if(testMode){
-        int result=authorizationCheck?verifyAuthorization(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos):agentCheck?verifyAgent(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos):personalCheck?verifyPersonal(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos,std::wstring(arguments).find(L"native")!=std::wstring::npos):
+        int result=chatCheck?verifyChat(std::filesystem::path(configPath).parent_path(),!chatRestart.empty()):authorizationCheck?verifyAuthorization(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos):agentCheck?verifyAgent(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos):personalCheck?verifyPersonal(std::filesystem::path(configPath).parent_path(),std::wstring(arguments).find(L"provider")!=std::wstring::npos,std::wstring(arguments).find(L"native")!=std::wstring::npos):
             hardwareCheck?verifyHardware(std::filesystem::path(configPath).parent_path()):
             connectionCheck?verifyAssistantConnection(std::filesystem::path(configPath).parent_path()):
             recording?recordMotion(std::filesystem::path(configPath).parent_path()):
@@ -2076,7 +2084,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int){
         volumeCallback->Release();disposeGraphics();CoUninitialize();return result;
     }
     taskbarCreated=RegisterWindowMessage(L"TaskbarCreated");
-    if(personal.ready){try{auto last=personal.store.get("settings","last-chat");if(last.is_object()){auto id=last.value("chat","");if(personal.store.get("chat",id).is_object())personalOpenChat(id);}}catch(...){personal.notice=L"Não foi possível restaurar a última conversa. Abra uma conversa salva.";}}
+    if(personal.ready){try{auto last=personal.store.get("settings","last-chat");if(last.is_object()){auto id=last.value("chat","");if(personal.store.get("chat",id).is_object()||personal.store.get("task",id).is_object())personalLoadPendingChat(id);}}catch(...){personal.notice=L"Não foi possível restaurar a última conversa. Abra uma conversa salva.";}}
     DragAcceptFiles(windowHandle,TRUE);tray(true);
     ShowWindow(windowHandle,SW_HIDE);
     foregroundHook=SetWinEventHook(EVENT_SYSTEM_FOREGROUND,EVENT_SYSTEM_FOREGROUND,nullptr,onForeground,0,0,WINEVENT_OUTOFCONTEXT);
